@@ -1051,6 +1051,7 @@ macro_rules! validate_proposal {
     (desc tail_call) => ("tail calls");
     (desc function_references) => ("function references");
     (desc memory_control) => ("memory control");
+    (desc mem_safety) => ("memory safety");
 }
 
 impl<'a, T> VisitOperator<'a> for WasmProposalValidator<'_, '_, T>
@@ -3368,6 +3369,37 @@ where
         self.pop_operand(Some(ValType::I32))?;
         Ok(())
     }
+
+    fn visit_segment_new(&mut self) -> Self::Output {
+        self.pop_operand(Some(ValType::I32))?;
+        self.push_operand(ValType::I32)?;
+        Ok(())
+    }
+
+    fn visit_segment_free(&mut self, ptr: MemArg) -> Self::Output {
+        let ty = self.check_memarg(ptr)?;
+        self.pop_operand(Some(ValType::I32))?;
+        self.pop_operand(Some(ty))?;
+        self.push_operand(ValType::I32)?;
+        Ok(())
+    }
+
+    fn visit_segment_stack_new(&mut self, sp: MemArg) -> Self::Output {
+        let ty = self.check_memarg(sp)?;
+        self.pop_operand(Some(ValType::I32))?;
+        self.pop_operand(Some(ty))?;
+        self.push_operand(ValType::I32)?;
+        Ok(())
+    }
+
+    // fn segment_stack_free(&mut self, ptr: MemArg, sp: MemArg) -> Self::Output {
+    //     let ptr_ty = self.check_memarg(ptr)?;
+    //     let sp_ty = self.check_memarg(sp)?;
+    //     self.pop_operand(Some(ValType::I32))?;
+    //     self.pop_operand(Some(sp_ty))?;
+    //     self.pop_operand(Some(ptr_ty))?;
+    //     Ok(())
+    // }
 }
 
 #[derive(Clone)]

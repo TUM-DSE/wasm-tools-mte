@@ -980,6 +980,7 @@ impl<'a> BinaryReader<'a> {
             0xfc => self.visit_0xfc_operator(pos, visitor)?,
             0xfd => self.visit_0xfd_operator(pos, visitor)?,
             0xfe => self.visit_0xfe_operator(pos, visitor)?,
+            0xfa => self.visit_0xfa_operator(pos, visitor)?,
 
             _ => bail!(pos, "illegal opcode: 0x{code:x}"),
         })
@@ -1458,6 +1459,38 @@ impl<'a> BinaryReader<'a> {
             0x4c => visitor.visit_i64_atomic_rmw8_cmpxchg_u(self.read_memarg(0)?),
             0x4d => visitor.visit_i64_atomic_rmw16_cmpxchg_u(self.read_memarg(1)?),
             0x4e => visitor.visit_i64_atomic_rmw32_cmpxchg_u(self.read_memarg(2)?),
+
+            _ => bail!(pos, "unknown 0xfe subopcode: 0x{code:x}"),
+        })
+    }
+
+    fn visit_0xfa_operator<T>(
+        &mut self,
+        pos: usize,
+        visitor: &mut T,
+    ) -> Result<<T as VisitOperator<'a>>::Output>
+    where
+        T: VisitOperator<'a>,
+    {
+        let code = self.read_var_u32()?;
+        Ok(match code {
+            // Instruction::SegmentNew => {
+            //     sink.push(0xFA);
+            //     sink.push(0x00);
+            // }
+            // Instruction::SegmentFree(memarg) => {
+            //     sink.push(0xFA);
+            //     sink.push(0x01);
+            //     memarg.encode(sink);
+            // }
+            // Instruction::SegmentStackNew(memarg) => {
+            //     sink.push(0xFA);
+            //     sink.push(0x02);
+            //     memarg.encode(sink);
+            // }
+            0x00 => visitor.visit_segment_new(),
+            0x01 => visitor.visit_segment_free(self.read_memarg(2)?),
+            0x02 => visitor.visit_segment_stack_new(self.read_memarg(3)?),
 
             _ => bail!(pos, "unknown 0xfe subopcode: 0x{code:x}"),
         })

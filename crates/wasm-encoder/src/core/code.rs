@@ -860,6 +860,10 @@ pub enum Instruction<'a> {
     I64AtomicRmw8CmpxchgU(MemArg),
     I64AtomicRmw16CmpxchgU(MemArg),
     I64AtomicRmw32CmpxchgU(MemArg),
+    SegmentNew,
+    SegmentFree(MemArg),
+    SegmentStackNew(MemArg),
+    // SegmentStackFree(MemArg, MemArg),
 }
 
 impl Encode for Instruction<'_> {
@@ -2784,6 +2788,26 @@ impl Encode for Instruction<'_> {
                 sink.push(0x4E);
                 memarg.encode(sink);
             }
+            Instruction::SegmentNew => {
+                sink.push(0xFA);
+                sink.push(0x00);
+            }
+            Instruction::SegmentFree(memarg) => {
+                sink.push(0xFA);
+                sink.push(0x01);
+                memarg.encode(sink);
+            }
+            Instruction::SegmentStackNew(memarg) => {
+                sink.push(0xFA);
+                sink.push(0x02);
+                memarg.encode(sink);
+            }
+            // Instruction::SegmentStackFree(memarg, memarg2) => {
+            //     sink.push(0xFA);
+            //     sink.push(0x03);
+            //     memarg.encode(sink);
+            //     memarg2.encode(sink);
+            // }
         }
     }
 }

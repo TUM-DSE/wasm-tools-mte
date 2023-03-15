@@ -107,6 +107,7 @@ fn parse_features(arg: &str) -> Result<WasmFeatures> {
         ("sign-extension", |f| &mut f.sign_extension),
         ("mutable-global", |f| &mut f.mutable_global),
         ("relaxed-simd", |f| &mut f.relaxed_simd),
+        ("mem-safety", |f| &mut f.mem_safety),
     ];
 
     for part in arg.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()) {

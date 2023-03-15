@@ -1164,6 +1164,11 @@ instructions! {
         I16x8RelaxedQ15mulrS: [0xfd, 0x111]: "i16x8.relaxed_q15mulr_s",
         I16x8RelaxedDotI8x16I7x16S: [0xfd, 0x112]: "i16x8.relaxed_dot_i8x16_i7x16_s",
         I32x4RelaxedDotI8x16I7x16AddS: [0xfd, 0x113]: "i32x4.relaxed_dot_i8x16_i7x16_add_s",
+
+        SegmentNew : [0xfa, 0x00]: "segment.new",
+        SegmentFree(MemArg<1>) : [0xfa, 0x01]: "segment.free",
+        SegmentStackNew(MemArg<1>) : [0xfa, 0x02]: "segment.new_stack",
+        // SegmentStackFree(MemArg<1>, MemArg<1>) : [0xfa, 0x03]: "segment.free_stack",
     }
 }
 

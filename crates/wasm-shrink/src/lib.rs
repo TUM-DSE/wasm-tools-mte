@@ -237,6 +237,7 @@ impl ShrinkRun {
 
             floats: true,
             memory_control: true,
+            mem_safety: true,
         });
 
         validator.validate_all(wasm)?;

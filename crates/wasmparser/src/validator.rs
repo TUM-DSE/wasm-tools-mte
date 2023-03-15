@@ -244,6 +244,8 @@ pub struct WasmFeatures {
     pub function_references: bool,
     /// The WebAssembly memory control proposal
     pub memory_control: bool,
+    /// The WebAssembly memory safety proposal
+    pub mem_safety: bool,
 }
 
 impl WasmFeatures {
@@ -304,6 +306,7 @@ impl Default for WasmFeatures {
             component_model: false,
             function_references: false,
             memory_control: false,
+            mem_safety: false,
 
             // On-by-default features (phase 4 or greater).
             mutable_global: true,

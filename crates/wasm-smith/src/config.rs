@@ -458,6 +458,16 @@ pub trait Config: 'static + std::fmt::Debug {
         false
     }
 
+    /// Determines whether the mem_safety proposal is enabled.
+    ///
+    /// The [mem_safety proposal] involves shared linear memory, new atomic
+    /// instructions, and new `wait` and `notify` instructions.
+    ///
+    /// Defaults to `false`.
+    fn mem_safety_enabled(&self) -> bool {
+        false
+    }
+
     /// Returns whether we should avoid generating code that will possibly trap.
     ///
     /// For some trapping instructions, this will emit extra instructions to
@@ -549,6 +559,7 @@ pub struct SwarmConfig {
     pub sign_extension_enabled: bool,
     pub simd_enabled: bool,
     pub threads_enabled: bool,
+    pub mem_safety_enabled: bool,
     pub allowed_instructions: InstructionKinds,
     pub max_table_elements: u32,
     pub table_max_size_required: bool,
@@ -626,6 +637,7 @@ impl<'a> Arbitrary<'a> for SwarmConfig {
             canonicalize_nans: false,
             available_imports: None,
             threads_enabled: false,
+            mem_safety_enabled: false,
             export_everything: false,
             disallow_traps: false,
         })
@@ -817,6 +829,10 @@ impl Config for SwarmConfig {
 
     fn threads_enabled(&self) -> bool {
         self.threads_enabled
+    }
+
+    fn mem_safety_enabled(&self) -> bool {
+        self.mem_safety_enabled
     }
 
     fn allowed_instructions(&self) -> InstructionKinds {

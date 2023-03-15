@@ -192,6 +192,9 @@ struct Config {
     #[clap(long = "threads")]
     #[serde(rename = "threads")]
     threads_enabled: Option<bool>,
+    #[clap(long = "mem-safety")]
+    #[serde(rename = "mem-safety")]
+    mem_safety_enabled: Option<bool>,
 }
 
 impl Opts {
@@ -315,6 +318,7 @@ impl wasm_smith::Config for CliAndJsonConfig {
         (canonicalize_nans, bool, false),
         (generate_custom_sections, bool, false),
         (threads_enabled, bool, false),
+        (mem_safety_enabled, bool, false),
     }
 
     fn max_memory_pages(&self, _is_64: bool) -> u64 {
