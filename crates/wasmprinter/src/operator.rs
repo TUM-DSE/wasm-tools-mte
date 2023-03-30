@@ -167,10 +167,6 @@ impl<'a, 'b> PrintOperator<'a, 'b> {
         Ok(())
     }
 
-    // fn memarg2(&mut self, memarg: MemArg) -> Result<()> {
-    //     self.memarg(memarg)
-    // }
-
     fn hty(&mut self, hty: HeapType) -> Result<()> {
         self.printer.print_heaptype(hty)
     }
@@ -864,7 +860,7 @@ macro_rules! define_visit {
     (name SegmentNew) => ("segment.new");
     (name SegmentFree) => ("segment.free");
     (name SegmentStackNew) => ("segment.new_stack");
-    // (name SegmentStackFree) => ("segment.free_stack");
+    (name SegmentStackFree) => ("segment.free_stack");
 }
 
 impl<'a> VisitOperator<'a> for PrintOperator<'_, '_> {

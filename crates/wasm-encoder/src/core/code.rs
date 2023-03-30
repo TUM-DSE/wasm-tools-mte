@@ -863,7 +863,7 @@ pub enum Instruction<'a> {
     SegmentNew,
     SegmentFree(MemArg),
     SegmentStackNew(MemArg),
-    // SegmentStackFree(MemArg, MemArg),
+    SegmentStackFree(MemArg),
 }
 
 impl Encode for Instruction<'_> {
@@ -2802,12 +2802,11 @@ impl Encode for Instruction<'_> {
                 sink.push(0x02);
                 memarg.encode(sink);
             }
-            // Instruction::SegmentStackFree(memarg, memarg2) => {
-            //     sink.push(0xFA);
-            //     sink.push(0x03);
-            //     memarg.encode(sink);
-            //     memarg2.encode(sink);
-            // }
+            Instruction::SegmentStackFree(memarg) => {
+                sink.push(0xFA);
+                sink.push(0x03);
+                memarg.encode(sink);
+            }
         }
     }
 }

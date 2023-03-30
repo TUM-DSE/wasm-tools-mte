@@ -353,7 +353,7 @@ pub fn op(t: &mut dyn Translator, op: &Operator<'_>) -> Result<Instruction<'stat
         (map $arg:ident ty) => (t.translate_ty($arg)?);
         (map $arg:ident hty) => (t.translate_heapty($arg)?);
         (map $arg:ident memarg) => (t.translate_memarg($arg)?);
-        // (map $arg:ident memarg2) => (t.translate_memarg($arg)?);
+        (map $arg:ident memarg2) => (t.translate_memarg($arg)?);
         (map $arg:ident local_index) => (*$arg);
         (map $arg:ident value) => ($arg);
         (map $arg:ident lane) => (*$arg);

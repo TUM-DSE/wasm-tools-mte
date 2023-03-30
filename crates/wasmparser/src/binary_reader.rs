@@ -1489,8 +1489,9 @@ impl<'a> BinaryReader<'a> {
             //     memarg.encode(sink);
             // }
             0x00 => visitor.visit_segment_new(),
-            0x01 => visitor.visit_segment_free(self.read_memarg(2)?),
-            0x02 => visitor.visit_segment_stack_new(self.read_memarg(3)?),
+            0x01 => visitor.visit_segment_free(self.read_memarg(1)?),
+            0x02 => visitor.visit_segment_stack_new(self.read_memarg(1)?),
+            0x03 => visitor.visit_segment_stack_free(self.read_memarg(1)?),
 
             _ => bail!(pos, "unknown 0xfe subopcode: 0x{code:x}"),
         })

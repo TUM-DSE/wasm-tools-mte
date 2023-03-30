@@ -689,7 +689,7 @@ macro_rules! for_each_operator {
             @mem_safety SegmentNew => visit_segment_new
             @mem_safety SegmentFree { memarg: $crate::MemArg } => visit_segment_free
             @mem_safety SegmentStackNew { memarg: $crate::MemArg } => visit_segment_stack_new
-            // @mem_safety SegmentStackFree { memarg: $crate::MemArg, memarg2: $crate::MemArg } => visit_segment_stack_free
+            @mem_safety SegmentStackFree { memarg: $crate::MemArg } => visit_segment_stack_free
         }
     };
 }

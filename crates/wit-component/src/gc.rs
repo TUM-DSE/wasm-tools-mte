@@ -1006,7 +1006,7 @@ macro_rules! define_visit {
     (mark_live $self:ident $arg:ident src_mem) => {$self.memory($arg);};
     (mark_live $self:ident $arg:ident dst_mem) => {$self.memory($arg);};
     (mark_live $self:ident $arg:ident memarg) => {$self.memory($arg.memory);};
-    // (mark_live $self:ident $arg:ident memarg2) => {$self.memory($arg.memory);};
+    (mark_live $self:ident $arg:ident memarg2) => {$self.memory($arg.memory);};
     (mark_live $self:ident $arg:ident blockty) => {$self.blockty($arg);};
     (mark_live $self:ident $arg:ident ty) => {$self.valty($arg)};
     (mark_live $self:ident $arg:ident hty) => {$self.heapty($arg)};
@@ -1175,7 +1175,7 @@ macro_rules! define_encode {
     // Individual cases of mapping one argument type to another, similar to the
     // `define_visit` macro above.
     (map $self:ident $arg:ident memarg) => {$self.memarg($arg)};
-    // (map $self:ident $arg:ident memarg2) => {$self.memarg($arg)};
+    (map $self:ident $arg:ident memarg2) => {$self.memarg($arg)};
     (map $self:ident $arg:ident blockty) => {$self.blockty($arg)};
     (map $self:ident $arg:ident hty) => {$self.heapty($arg)};
     (map $self:ident $arg:ident tag_index) => {$arg};

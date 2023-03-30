@@ -472,6 +472,7 @@ macro_rules! instructions {
         }
     );
 
+    // (@ty MemArg<$amt:tt>, MemArg<$amt2:tt>) => ((MemArg<'a>, MemArg<'b>));
     (@ty MemArg<$amt:tt>) => (MemArg<'a>);
     (@ty LoadOrStoreLane<$amt:tt>) => (LoadOrStoreLane<'a>);
     (@ty $other:ty) => ($other);
@@ -1168,7 +1169,7 @@ instructions! {
         SegmentNew : [0xfa, 0x00]: "segment.new",
         SegmentFree(MemArg<1>) : [0xfa, 0x01]: "segment.free",
         SegmentStackNew(MemArg<1>) : [0xfa, 0x02]: "segment.new_stack",
-        // SegmentStackFree(MemArg<1>, MemArg<1>) : [0xfa, 0x03]: "segment.free_stack",
+        SegmentStackFree(MemArg<1>) : [0xfa, 0x03]: "segment.free_stack",
     }
 }
 

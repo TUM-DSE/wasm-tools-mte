@@ -3392,14 +3392,13 @@ where
         Ok(())
     }
 
-    // fn segment_stack_free(&mut self, ptr: MemArg, sp: MemArg) -> Self::Output {
-    //     let ptr_ty = self.check_memarg(ptr)?;
-    //     let sp_ty = self.check_memarg(sp)?;
-    //     self.pop_operand(Some(ValType::I32))?;
-    //     self.pop_operand(Some(sp_ty))?;
-    //     self.pop_operand(Some(ptr_ty))?;
-    //     Ok(())
-    // }
+    fn visit_segment_stack_free(&mut self, ptr: MemArg) -> Self::Output {
+        let ptr_ty = self.check_memarg(ptr)?;
+        self.pop_operand(Some(ValType::I32))?;
+        self.pop_operand(Some(ptr_ty))?; // we pop the stack pointer
+        self.pop_operand(Some(ptr_ty))?;
+        Ok(())
+    }
 }
 
 #[derive(Clone)]
