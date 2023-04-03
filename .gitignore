@@ -8,3 +8,5 @@ publish
 test.config
 .idea
 
+.direnv
+
