@@ -1168,8 +1168,8 @@ instructions! {
 
         SegmentNew : [0xfa, 0x00]: "segment.new",
         SegmentFree(MemArg<1>) : [0xfa, 0x01]: "segment.free",
-        SegmentStackNew(MemArg<1>) : [0xfa, 0x02]: "segment.new_stack",
-        SegmentStackFree(MemArg<1>) : [0xfa, 0x03]: "segment.free_stack",
+        SegmentStackNew(MemArg<1>) : [0xfa, 0x02]: "segment.stack_new",
+        SegmentStackFree(MemArg<1>) : [0xfa, 0x03]: "segment.stack_free",
     }
 }
 
