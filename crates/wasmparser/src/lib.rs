@@ -690,6 +690,8 @@ macro_rules! for_each_operator {
             @mem_safety SegmentFree { memarg: $crate::MemArg } => visit_segment_free
             @mem_safety SegmentStackNew { memarg: $crate::MemArg } => visit_segment_stack_new
             @mem_safety SegmentStackFree { memarg: $crate::MemArg } => visit_segment_stack_free
+            @mem_safety I32StoreSegment { memarg: $crate::MemArg } => visit_i32_store_segment
+            @mem_safety I32LoadSegment { memarg: $crate::MemArg } => visit_i32_load_segment
         }
     };
 }

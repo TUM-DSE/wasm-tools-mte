@@ -1170,6 +1170,8 @@ instructions! {
         SegmentFree(MemArg<1>) : [0xfa, 0x01]: "segment.free",
         SegmentStackNew(MemArg<1>) : [0xfa, 0x02]: "segment.stack_new",
         SegmentStackFree(MemArg<1>) : [0xfa, 0x03]: "segment.stack_free",
+        I32StoreSegment(MemArg<1>) : [0xfa, 0x04]: "i32.store_segment",
+        I32LoadSegment(MemArg<1>) : [0xfa, 0x05]: "i32.load_segment",
     }
 }
 
