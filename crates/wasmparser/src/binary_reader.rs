@@ -1474,20 +1474,6 @@ impl<'a> BinaryReader<'a> {
     {
         let code = self.read_var_u32()?;
         Ok(match code {
-            // Instruction::SegmentNew => {
-            //     sink.push(0xFA);
-            //     sink.push(0x00);
-            // }
-            // Instruction::SegmentFree(memarg) => {
-            //     sink.push(0xFA);
-            //     sink.push(0x01);
-            //     memarg.encode(sink);
-            // }
-            // Instruction::SegmentStackNew(memarg) => {
-            //     sink.push(0xFA);
-            //     sink.push(0x02);
-            //     memarg.encode(sink);
-            // }
             0x00 => visitor.visit_segment_new(),
             0x01 => visitor.visit_segment_free(self.read_memarg(1)?),
             0x02 => visitor.visit_segment_stack_new(self.read_memarg(1)?),
