@@ -3380,7 +3380,6 @@ where
         let ty = self.check_memarg(ptr)?;
         self.pop_operand(Some(ValType::I32))?;
         self.pop_operand(Some(ty))?; // pointer
-        self.push_operand(ValType::I32)?;
         Ok(())
     }
 
