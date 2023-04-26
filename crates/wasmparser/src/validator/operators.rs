@@ -3377,9 +3377,9 @@ where
     }
 
     fn visit_segment_free(&mut self, ptr: MemArg) -> Self::Output {
-        let ty = self.check_memarg(ptr)?;
+        let _ty = self.check_memarg(ptr)?;
         self.pop_operand(Some(ValType::I32))?;
-        self.pop_operand(Some(ty))?; // pointer
+        self.pop_operand(Some(ValType::I64))?; // pointer
         Ok(())
     }
 
