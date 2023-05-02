@@ -864,8 +864,6 @@ pub enum Instruction<'a> {
     SegmentFree(MemArg),
     SegmentStackNew(MemArg),
     SegmentStackFree(MemArg),
-    I32StoreSegment(MemArg),
-    I32LoadSegment(MemArg),
 }
 
 impl Encode for Instruction<'_> {
@@ -2807,16 +2805,6 @@ impl Encode for Instruction<'_> {
             Instruction::SegmentStackFree(memarg) => {
                 sink.push(0xFA);
                 sink.push(0x03);
-                memarg.encode(sink);
-            }
-            Instruction::I32StoreSegment(memarg) => {
-                sink.push(0xFA);
-                sink.push(0x04);
-                memarg.encode(sink);
-            }
-            Instruction::I32LoadSegment(memarg) => {
-                sink.push(0xFA);
-                sink.push(0x05);
                 memarg.encode(sink);
             }
         }

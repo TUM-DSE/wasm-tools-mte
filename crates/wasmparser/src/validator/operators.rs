@@ -3371,45 +3371,34 @@ where
     }
 
     fn visit_segment_new(&mut self) -> Self::Output {
-        self.pop_operand(Some(ValType::I32))?;
+        self.pop_operand(Some(ValType::I64))?;
         self.push_operand(ValType::I64)?;
         Ok(())
     }
 
     fn visit_segment_free(&mut self, ptr: MemArg) -> Self::Output {
-        let _ty = self.check_memarg(ptr)?;
-        self.pop_operand(Some(ValType::I32))?;
-        self.pop_operand(Some(ValType::I64))?; // pointer
+        let ty = self.check_memarg(ptr)?;
+        assert_eq!(ty, ValType::I64, "memory safety instructions only available in wasm64");
+        self.pop_operand(Some(ValType::I64))?;
+        self.pop_operand(Some(ty))?; // pointer
         Ok(())
     }
 
     fn visit_segment_stack_new(&mut self, sp: MemArg) -> Self::Output {
         let ty = self.check_memarg(sp)?;
-        self.pop_operand(Some(ValType::I32))?;
+        assert_eq!(ty, ValType::I64, "memory safety instructions only available in wasm64");
+        self.pop_operand(Some(ValType::I64))?;
         self.pop_operand(Some(ty))?;
         self.push_operand(ValType::I64)?;
         Ok(())
     }
 
     fn visit_segment_stack_free(&mut self, ptr: MemArg) -> Self::Output {
-        let ptr_ty = self.check_memarg(ptr)?;
-        self.pop_operand(Some(ValType::I32))?;
-        self.pop_operand(Some(ptr_ty))?; // stack pointer
-        self.pop_operand(Some(ValType::I64))?; // pointer
-        Ok(())
-    }
-
-    fn visit_i32_store_segment(&mut self, memarg: MemArg) -> Self::Output {
-        let _ty = self.check_memarg(memarg)?;
-        self.pop_operand(Some(ValType::I32))?;
-        self.pop_operand(Some(ValType::I64))?;
-        Ok(())
-    }
-
-    fn visit_i32_load_segment(&mut self, memarg: MemArg) -> Self::Output {
-        let _ty = self.check_memarg(memarg)?;
-        self.pop_operand(Some(ValType::I64))?;
-        self.push_operand(ValType::I32)?;
+        let ty = self.check_memarg(ptr)?;
+        assert_eq!(ty, ValType::I64, "memory safety instructions only available in wasm64");
+        self.pop_operand(Some(ValType::I64))?; // size
+        self.pop_operand(Some(ty))?; // stack pointer
+        self.pop_operand(Some(ty))?; // pointer
         Ok(())
     }
 }

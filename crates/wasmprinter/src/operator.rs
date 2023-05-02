@@ -861,8 +861,6 @@ macro_rules! define_visit {
     (name SegmentFree) => ("segment.free");
     (name SegmentStackNew) => ("segment.stack_new");
     (name SegmentStackFree) => ("segment.stack_free");
-    (name I32StoreSegment) => ("i32.store_segment");
-    (name I32LoadSegment) => ("i32.load_segment");
 }
 
 impl<'a> VisitOperator<'a> for PrintOperator<'_, '_> {
