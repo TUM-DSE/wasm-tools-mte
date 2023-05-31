@@ -14,9 +14,11 @@
  */
 
 use crate::{
-    limits::*, BinaryReaderError, Encoding, FromReader, FunctionBody, HeapType, Parser, Payload,
-    Result, SectionLimited, ValType, WASM_COMPONENT_VERSION, WASM_MODULE_VERSION,
+    limits::*, BinaryReader, BinaryReaderError, Encoding, FromReader, FunctionBody, HeapType,
+    InstReplacement, Parser, Payload, Result, SectionLimited, ValType, WASM_COMPONENT_VERSION,
+    WASM_MODULE_VERSION,
 };
+use std::collections::HashMap;
 use std::mem;
 use std::ops::Range;
 use std::sync::Arc;
@@ -673,6 +675,43 @@ impl Validator {
                 state.module.assert_mut().add_memory(ty, features, offset)
             },
         )
+    }
+
+    /// Validates [`Payload::CustomSection`](crate::Payload) if it is a memory safety section.
+    ///
+    /// This method should only be called when parsing a module.
+    pub fn memory_safety_section<'a>(
+        &mut self,
+        section: &crate::CustomSectionReader<'a>,
+        section_offset: usize,
+    ) -> Result<HashMap<usize, InstReplacement>> {
+        // The data in the memory safety section is structured as follows:
+        // * A index corresponding to the offset in the code section encoded as leb128
+        // * A number of how many drop instructions this instruction replaces encoded as leb128
+        // * The instruction that should be inserted at the offset
+
+        let mut reader = BinaryReader::new_with_offset(section.data, section_offset);
+
+        let mut translations = HashMap::new();
+
+        while !reader.eof() {
+            let offset = reader.read_u64()? as usize;
+            let skip_bytes = reader.read_u8()?;
+
+            let pos = reader.current_position();
+            reader.read_operator()?;
+            let inst = reader.buffer[pos..reader.current_position()].to_vec();
+            translations.insert(
+                offset,
+                InstReplacement {
+                    offset,
+                    skip_bytes,
+                    inst,
+                },
+            );
+        }
+
+        Ok(translations)
     }
 
     /// Validates [`Payload::TagSection`](crate::Payload).
