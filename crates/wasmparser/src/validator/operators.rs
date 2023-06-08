@@ -3401,6 +3401,22 @@ where
         self.pop_operand(Some(ty))?; // pointer
         Ok(())
     }
+
+    fn visit_i64_pointer_sign(&mut self, memarg: MemArg) -> Self::Output {
+        let ty = self.check_memarg(memarg)?;
+        assert_eq!(ty, ValType::I64, "memory safety instructions only available in wasm64");
+        self.pop_operand(Some(ty))?; // parameter: unsigned pointer
+        self.push_operand(ValType::I64)?; // return: signed pointer
+        Ok(())
+    }
+
+    fn visit_i64_pointer_auth(&mut self, memarg: MemArg) -> Self::Output {
+        let ty = self.check_memarg(memarg)?;
+        assert_eq!(ty, ValType::I64, "memory safety instructions only available in wasm64");
+        self.pop_operand(Some(ty))?; // parameter: pointer to be authenticated
+        self.push_operand(ValType::I64)?; // return: authenticated pointer
+        Ok(())
+    }
 }
 
 #[derive(Clone)]

@@ -1170,6 +1170,8 @@ instructions! {
         SegmentFree(MemArg<1>) : [0xfa, 0x01]: "segment.free",
         SegmentStackNew(MemArg<1>) : [0xfa, 0x02]: "segment.stack_new",
         SegmentStackFree(MemArg<1>) : [0xfa, 0x03]: "segment.stack_free",
+        I64PointerSign(MemArg<1>) : [0xfa, 0x04]: "i64.pointer_sign",
+        I64PointerAuth(MemArg<1>) : [0xfa, 0x05]: "i64.pointer_auth",
     }
 }
 

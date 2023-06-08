@@ -861,6 +861,8 @@ macro_rules! define_visit {
     (name SegmentFree) => ("segment.free");
     (name SegmentStackNew) => ("segment.stack_new");
     (name SegmentStackFree) => ("segment.stack_free");
+    (name I64PointerSign) => ("i64.pointer_sign");
+    (name I64PointerAuth) => ("i64.pointer_auth");
 }
 
 impl<'a> VisitOperator<'a> for PrintOperator<'_, '_> {
