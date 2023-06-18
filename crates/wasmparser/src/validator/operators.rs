@@ -3378,7 +3378,11 @@ where
 
     fn visit_segment_free(&mut self, ptr: MemArg) -> Self::Output {
         let ty = self.check_memarg(ptr)?;
-        assert_eq!(ty, ValType::I64, "memory safety instructions only available in wasm64");
+        assert_eq!(
+            ty,
+            ValType::I64,
+            "memory safety instructions only available in wasm64"
+        );
         self.pop_operand(Some(ValType::I64))?;
         self.pop_operand(Some(ty))?; // pointer
         Ok(())
@@ -3386,7 +3390,11 @@ where
 
     fn visit_segment_stack_new(&mut self, sp: MemArg) -> Self::Output {
         let ty = self.check_memarg(sp)?;
-        assert_eq!(ty, ValType::I64, "memory safety instructions only available in wasm64");
+        assert_eq!(
+            ty,
+            ValType::I64,
+            "memory safety instructions only available in wasm64"
+        );
         self.pop_operand(Some(ValType::I64))?;
         self.pop_operand(Some(ty))?;
         self.push_operand(ValType::I64)?;
@@ -3395,25 +3403,25 @@ where
 
     fn visit_segment_stack_free(&mut self, ptr: MemArg) -> Self::Output {
         let ty = self.check_memarg(ptr)?;
-        assert_eq!(ty, ValType::I64, "memory safety instructions only available in wasm64");
+        assert_eq!(
+            ty,
+            ValType::I64,
+            "memory safety instructions only available in wasm64"
+        );
         self.pop_operand(Some(ValType::I64))?; // size
         self.pop_operand(Some(ty))?; // stack pointer
         self.pop_operand(Some(ty))?; // pointer
         Ok(())
     }
 
-    fn visit_i64_pointer_sign(&mut self, memarg: MemArg) -> Self::Output {
-        let ty = self.check_memarg(memarg)?;
-        assert_eq!(ty, ValType::I64, "memory safety instructions only available in wasm64");
-        self.pop_operand(Some(ty))?; // parameter: unsigned pointer
+    fn visit_i64_pointer_sign(&mut self) -> Self::Output {
+        self.pop_operand(Some(ValType::I64))?; // parameter: unsigned pointer
         self.push_operand(ValType::I64)?; // return: signed pointer
         Ok(())
     }
 
-    fn visit_i64_pointer_auth(&mut self, memarg: MemArg) -> Self::Output {
-        let ty = self.check_memarg(memarg)?;
-        assert_eq!(ty, ValType::I64, "memory safety instructions only available in wasm64");
-        self.pop_operand(Some(ty))?; // parameter: pointer to be authenticated
+    fn visit_i64_pointer_auth(&mut self) -> Self::Output {
+        self.pop_operand(Some(ValType::I64))?; // parameter: pointer to be authenticated
         self.push_operand(ValType::I64)?; // return: authenticated pointer
         Ok(())
     }

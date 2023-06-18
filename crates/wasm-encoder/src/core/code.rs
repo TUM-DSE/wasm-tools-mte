@@ -864,8 +864,8 @@ pub enum Instruction<'a> {
     SegmentFree(MemArg),
     SegmentStackNew(MemArg),
     SegmentStackFree(MemArg),
-    I64PointerSign(MemArg),
-    I64PointerAuth(MemArg),
+    I64PointerSign,
+    I64PointerAuth,
 }
 
 impl Encode for Instruction<'_> {
@@ -2809,15 +2809,13 @@ impl Encode for Instruction<'_> {
                 sink.push(0x03);
                 memarg.encode(sink);
             }
-            Instruction::I64PointerSign(memarg) => {
+            Instruction::I64PointerSign => {
                 sink.push(0xFA);
                 sink.push(0x04);
-                memarg.encode(sink);
             }
-            Instruction::I64PointerAuth(memarg) => {
+            Instruction::I64PointerAuth => {
                 sink.push(0xFA);
                 sink.push(0x05);
-                memarg.encode(sink);
             }
         }
     }
