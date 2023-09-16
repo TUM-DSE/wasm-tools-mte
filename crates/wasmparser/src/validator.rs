@@ -701,6 +701,7 @@ impl Validator {
             let pos = reader.current_position();
             reader.read_operator()?;
             let inst = reader.buffer[pos..reader.current_position()].to_vec();
+            eprintln!("Replacement: 0x{:x}, {}, {:x?}", offset, skip_bytes, inst);
             translations.insert(
                 offset,
                 InstReplacement {
