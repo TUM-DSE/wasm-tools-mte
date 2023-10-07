@@ -378,3 +378,14 @@ impl<'a> FromReader<'a> for FuncType {
         Ok(FuncType::from_raw_parts(params_results.into(), len_params))
     }
 }
+
+/// Represents a replacement of one or more instructions.
+#[derive(Debug, Clone)]
+pub struct InstReplacement {
+    /// The offset of the instruction to replace.
+    pub offset: usize,
+    /// The number of bytes to skip.
+    pub skip_bytes: u8,
+    /// The replacement instructions, encoded to fix the lifetime issues.
+    pub inst: Vec<u8>,
+}

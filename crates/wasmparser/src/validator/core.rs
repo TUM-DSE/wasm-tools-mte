@@ -480,6 +480,7 @@ pub(crate) struct Module {
     pub globals: Vec<GlobalType>,
     pub element_types: Vec<RefType>,
     pub data_count: Option<u32>,
+    // pub inst_replacements: Vec<InstReplacement>,
     // Stores indexes into `types`.
     pub functions: Vec<u32>,
     pub tags: Vec<TypeId>,
