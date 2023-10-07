@@ -858,9 +858,8 @@ macro_rules! define_visit {
     (name I16x8RelaxedDotI8x16I7x16S) => ("i16x8.relaxed_dot_i8x16_i7x16_s");
     (name I32x4RelaxedDotI8x16I7x16AddS) => ("i32x4.relaxed_dot_i8x16_i7x16_add_s");
     (name SegmentNew) => ("segment.new");
+    (name SegmentSetTag) => ("segment.set_tag");
     (name SegmentFree) => ("segment.free");
-    (name SegmentStackNew) => ("segment.stack_new");
-    (name SegmentStackFree) => ("segment.stack_free");
 }
 
 impl<'a> VisitOperator<'a> for PrintOperator<'_, '_> {

@@ -686,10 +686,9 @@ macro_rules! for_each_operator {
             @function_references BrOnNonNull { relative_depth: u32 } => visit_br_on_non_null
 
             // Memory Safety Instructions
-            @mem_safety SegmentNew => visit_segment_new
+            @mem_safety SegmentNew { memarg: $crate::MemArg } => visit_segment_new
+            @mem_safety SegmentSetTag { memarg: $crate::MemArg } => visit_segment_set_tag
             @mem_safety SegmentFree { memarg: $crate::MemArg } => visit_segment_free
-            @mem_safety SegmentStackNew { memarg: $crate::MemArg } => visit_segment_stack_new
-            @mem_safety SegmentStackFree { memarg: $crate::MemArg } => visit_segment_stack_free
         }
     };
 }
