@@ -76,10 +76,10 @@ pub struct Opts {
     module_config: Config,
 
     #[clap(flatten)]
-    verbosity: wasm_tools::Verbosity,
+    general: wasm_tools::GeneralOpts,
 }
 
-#[derive(Default, Debug, Parser, Clone, serde::Deserialize)]
+#[derive(Default, Debug, Parser, Clone, serde_derive::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct Config {
     #[clap(long = "min-types")]
@@ -198,8 +198,11 @@ struct Config {
 }
 
 impl Opts {
+    pub fn general_opts(&self) -> &wasm_tools::GeneralOpts {
+        &self.general
+    }
+
     pub fn run(&self) -> Result<()> {
-        self.verbosity.init_logger();
         let seed = match &self.input {
             Some(f) => {
                 std::fs::read(f).with_context(|| format!("failed to read '{}'", f.display()))?

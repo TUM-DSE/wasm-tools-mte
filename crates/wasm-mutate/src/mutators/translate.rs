@@ -1,6 +1,6 @@
 use crate::{Error, Result};
 use wasm_encoder::*;
-use wasmparser::{DataKind, ElementKind, FunctionBody, Global, Operator, Type};
+use wasmparser::{DataKind, ElementKind, FunctionBody, Global, Operator};
 
 #[derive(Debug, Hash, Eq, PartialEq, Copy, Clone)]
 pub enum Item {
@@ -26,8 +26,8 @@ pub enum ConstExprKind {
 pub trait Translator {
     fn as_obj(&mut self) -> &mut dyn Translator;
 
-    fn translate_type_def(&mut self, ty: Type, s: &mut TypeSection) -> Result<()> {
-        type_def(self.as_obj(), ty, s)
+    fn translate_func_type(&mut self, ty: wasmparser::FuncType, s: &mut TypeSection) -> Result<()> {
+        func_type(self.as_obj(), ty, s)
     }
 
     fn translate_table_type(
@@ -109,7 +109,7 @@ pub trait Translator {
     }
 
     fn remap(&mut self, item: Item, idx: u32) -> Result<u32> {
-        drop(item);
+        let _ = item;
         Ok(idx)
     }
 }
@@ -122,22 +122,22 @@ impl Translator for DefaultTranslator {
     }
 }
 
-pub fn type_def(t: &mut dyn Translator, ty: Type, s: &mut TypeSection) -> Result<()> {
-    match ty {
-        Type::Func(f) => {
-            s.function(
-                f.params()
-                    .iter()
-                    .map(|ty| t.translate_ty(ty))
-                    .collect::<Result<Vec<_>>>()?,
-                f.results()
-                    .iter()
-                    .map(|ty| t.translate_ty(ty))
-                    .collect::<Result<Vec<_>>>()?,
-            );
-            Ok(())
-        }
-    }
+pub fn func_type(
+    t: &mut dyn Translator,
+    ty: wasmparser::FuncType,
+    s: &mut TypeSection,
+) -> Result<()> {
+    s.function(
+        ty.params()
+            .iter()
+            .map(|ty| t.translate_ty(ty))
+            .collect::<Result<Vec<_>>>()?,
+        ty.results()
+            .iter()
+            .map(|ty| t.translate_ty(ty))
+            .collect::<Result<Vec<_>>>()?,
+    );
+    Ok(())
 }
 
 pub fn table_type(
@@ -193,8 +193,8 @@ pub fn ty(t: &mut dyn Translator, ty: &wasmparser::ValType) -> Result<ValType> {
 
 pub fn refty(t: &mut dyn Translator, ty: &wasmparser::RefType) -> Result<RefType> {
     Ok(RefType {
-        nullable: ty.nullable,
-        heap_type: t.translate_heapty(&ty.heap_type)?,
+        nullable: ty.is_nullable(),
+        heap_type: t.translate_heapty(&ty.heap_type())?,
     })
 }
 
@@ -202,8 +202,16 @@ pub fn heapty(t: &mut dyn Translator, ty: &wasmparser::HeapType) -> Result<HeapT
     match ty {
         wasmparser::HeapType::Func => Ok(HeapType::Func),
         wasmparser::HeapType::Extern => Ok(HeapType::Extern),
-        wasmparser::HeapType::TypedFunc(i) => {
-            Ok(HeapType::TypedFunc(t.remap(Item::Type, (*i).into())?))
+        wasmparser::HeapType::Any => Ok(HeapType::Any),
+        wasmparser::HeapType::None => Ok(HeapType::None),
+        wasmparser::HeapType::NoExtern => Ok(HeapType::NoExtern),
+        wasmparser::HeapType::NoFunc => Ok(HeapType::NoFunc),
+        wasmparser::HeapType::Eq => Ok(HeapType::Eq),
+        wasmparser::HeapType::Struct => Ok(HeapType::Struct),
+        wasmparser::HeapType::Array => Ok(HeapType::Array),
+        wasmparser::HeapType::I31 => Ok(HeapType::I31),
+        wasmparser::HeapType::Concrete(i) => {
+            Ok(HeapType::Concrete(t.remap(Item::Type, (*i).into())?))
         }
     }
 }
@@ -262,15 +270,16 @@ pub fn element(
                 &wasmparser::ValType::I32,
                 ConstExprKind::ElementOffset,
             )?;
+            let table_index = table_index.unwrap_or(0);
+            let table = t.remap(Item::Table, table_index)?;
             ElementMode::Active {
-                table: Some(t.remap(Item::Table, *table_index)?),
+                table: if table == 0 { None } else { Some(table) },
                 offset: &offset,
             }
         }
         ElementKind::Passive => ElementMode::Passive,
         ElementKind::Declared => ElementMode::Declared,
     };
-    let element_type = t.translate_refty(&element.ty)?;
     let functions;
     let exprs;
     let elements = match element.items {
@@ -281,25 +290,21 @@ pub fn element(
                 .collect::<Result<Vec<_>, _>>()?;
             Elements::Functions(&functions)
         }
-        wasmparser::ElementItems::Expressions(reader) => {
+        wasmparser::ElementItems::Expressions(ty, reader) => {
             exprs = reader
                 .into_iter()
                 .map(|f| {
                     t.translate_const_expr(
                         &f?,
-                        &wasmparser::ValType::Ref(element.ty),
+                        &wasmparser::ValType::Ref(ty),
                         ConstExprKind::ElementFunction,
                     )
                 })
                 .collect::<Result<Vec<_>, _>>()?;
-            Elements::Expressions(&exprs)
+            Elements::Expressions(t.translate_refty(&ty)?, &exprs)
         }
     };
-    s.segment(ElementSegment {
-        mode,
-        element_type,
-        elements,
-    });
+    s.segment(ElementSegment { mode, elements });
     Ok(())
 }
 

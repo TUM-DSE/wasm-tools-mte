@@ -1,12 +1,17 @@
+package foo:foo;
+
 interface name {
-  record foo {}
+  record foo {
+    f: u32,
+  }
 }
 
-default world foo {
-  export other-name: self.name
-  export name: interface {
-    use self.name.{foo}
+world module {
+  export name;
 
-    a: func(f: foo)
+  export name: interface {
+    use name.{foo};
+
+    a: func(f: foo);
   }
 }

@@ -1,11 +1,12 @@
-interface %interface {
-  type %type = u32
+package foo:foo;
 
-  type %world = %type
+interface %interface {
+  type %type = u32;
+
+  type %world = %type;
 
   record %record {
     %variant: %world,
   }
-
 }
 

@@ -7,8 +7,11 @@
           (export (;0;) "a" (func (type 0)))
         )
       )
-      (export (;0;) "foo" "pkg:/single-named-result/foo" (instance (type 0)))
+      (export (;0;) "foo:foo/foo" (instance (type 0)))
     )
   )
-  (export (;1;) "single-named-result" "pkg:/single-named-result" (type 0))
+  (export (;1;) "foo" (type 0))
+  (@producers
+    (processed-by "wit-component" "$CARGO_PKG_VERSION")
+  )
 )

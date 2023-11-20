@@ -1,6 +1,8 @@
+cargo_component_bindings::generate!();
+
 use bindings::{
-    downstream,
-    handler::{Error, Handler, Request, Response},
+    example::service::handler as downstream,
+    exports::example::service::handler::{Error, Handler, Request, Response},
 };
 use flate2::{write::GzEncoder, Compression};
 use std::io::Write;
@@ -9,16 +11,10 @@ struct Component;
 
 impl Handler for Component {
     fn execute(req: Request) -> Result<Response, Error> {
-        let headers: Vec<_> = req
-            .headers
-            .iter()
-            .map(|(k, v)| (k.as_slice(), v.as_slice()))
-            .collect();
-
         // Send the request to the downstream service
-        let mut response = downstream::execute(downstream::Request {
-            headers: &headers,
-            body: &req.body,
+        let mut response = downstream::execute(&downstream::Request {
+            headers: req.headers,
+            body: req.body,
         })
         .map(|r| Response {
             headers: r.headers,
@@ -52,5 +48,3 @@ impl Handler for Component {
         Ok(response)
     }
 }
-
-bindings::export!(Component);

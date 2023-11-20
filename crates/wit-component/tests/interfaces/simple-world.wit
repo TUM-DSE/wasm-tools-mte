@@ -1,7 +1,9 @@
+package foo:foo;
+
 world the-world {
-  import console: self.console
+  import console;
 }
 
 interface console {
-  log: func(arg: string)
+  log: func(arg: string);
 }

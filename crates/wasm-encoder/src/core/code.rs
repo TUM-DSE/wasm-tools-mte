@@ -322,9 +322,9 @@ pub enum Instruction<'a> {
     BrOnNonNull(u32),
     Return,
     Call(u32),
-    CallRef(HeapType),
+    CallRef(u32),
     CallIndirect { ty: u32, table: u32 },
-    ReturnCallRef(HeapType),
+    ReturnCallRef(u32),
     ReturnCall(u32),
     ReturnCallIndirect { ty: u32, table: u32 },
     Throw(u32),
@@ -521,6 +521,11 @@ pub enum Instruction<'a> {
     RefIsNull,
     RefFunc(u32),
     RefAsNonNull,
+
+    // GC types instructions.
+    RefI31,
+    I31GetS,
+    I31GetU,
 
     // Bulk memory instructions.
     TableInit { elem_index: u32, table: u32 },
@@ -915,7 +920,7 @@ impl Encode for Instruction<'_> {
                 l.encode(sink);
             }
             Instruction::BrOnNull(l) => {
-                sink.push(0xD4);
+                sink.push(0xD5);
                 l.encode(sink);
             }
             Instruction::BrOnNonNull(l) => {
@@ -1316,7 +1321,21 @@ impl Encode for Instruction<'_> {
                 sink.push(0xd2);
                 f.encode(sink);
             }
-            Instruction::RefAsNonNull => sink.push(0xD3),
+            Instruction::RefAsNonNull => sink.push(0xd4),
+
+            // GC instructions.
+            Instruction::RefI31 => {
+                sink.push(0xfb);
+                sink.push(0x1c)
+            }
+            Instruction::I31GetS => {
+                sink.push(0xfb);
+                sink.push(0x1d)
+            }
+            Instruction::I31GetU => {
+                sink.push(0xfb);
+                sink.push(0x1e)
+            }
 
             // Bulk memory instructions.
             Instruction::TableInit { elem_index, table } => {
@@ -2878,6 +2897,82 @@ impl Encode for ConstExpr {
     fn encode(&self, sink: &mut Vec<u8>) {
         sink.extend(&self.bytes);
         Instruction::End.encode(sink);
+    }
+}
+
+/// An error when converting a `wasmparser::ConstExpr` into a
+/// `wasm_encoder::ConstExpr`.
+#[cfg(feature = "wasmparser")]
+#[derive(Debug)]
+pub enum ConstExprConversionError {
+    /// There was an error when parsing the const expression.
+    ParseError(wasmparser::BinaryReaderError),
+
+    /// The const expression is invalid: not actually constant or something like
+    /// that.
+    Invalid,
+}
+
+#[cfg(feature = "wasmparser")]
+impl std::fmt::Display for ConstExprConversionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ParseError(_e) => {
+                write!(f, "There was an error when parsing the const expression")
+            }
+            Self::Invalid => write!(f, "The const expression was invalid"),
+        }
+    }
+}
+
+#[cfg(feature = "wasmparser")]
+impl std::error::Error for ConstExprConversionError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::ParseError(e) => Some(e),
+            Self::Invalid => None,
+        }
+    }
+}
+
+#[cfg(feature = "wasmparser")]
+impl<'a> TryFrom<wasmparser::ConstExpr<'a>> for ConstExpr {
+    type Error = ConstExprConversionError;
+
+    fn try_from(const_expr: wasmparser::ConstExpr) -> Result<Self, Self::Error> {
+        let mut ops = const_expr.get_operators_reader().into_iter();
+
+        let result = match ops.next() {
+            Some(Ok(wasmparser::Operator::I32Const { value })) => ConstExpr::i32_const(value),
+            Some(Ok(wasmparser::Operator::I64Const { value })) => ConstExpr::i64_const(value),
+            Some(Ok(wasmparser::Operator::F32Const { value })) => {
+                ConstExpr::f32_const(value.bits() as _)
+            }
+            Some(Ok(wasmparser::Operator::F64Const { value })) => {
+                ConstExpr::f64_const(value.bits() as _)
+            }
+            Some(Ok(wasmparser::Operator::V128Const { value })) => {
+                ConstExpr::v128_const(i128::from_le_bytes(*value.bytes()))
+            }
+            Some(Ok(wasmparser::Operator::RefNull { hty })) => ConstExpr::ref_null(hty.into()),
+            Some(Ok(wasmparser::Operator::RefFunc { function_index })) => {
+                ConstExpr::ref_func(function_index)
+            }
+            Some(Ok(wasmparser::Operator::GlobalGet { global_index })) => {
+                ConstExpr::global_get(global_index)
+            }
+
+            // TODO: support the extended-const proposal.
+            Some(Ok(_op)) => return Err(ConstExprConversionError::Invalid),
+
+            Some(Err(e)) => return Err(ConstExprConversionError::ParseError(e)),
+            None => return Err(ConstExprConversionError::Invalid),
+        };
+
+        match (ops.next(), ops.next()) {
+            (Some(Ok(wasmparser::Operator::End)), None) => Ok(result),
+            _ => Err(ConstExprConversionError::Invalid),
+        }
     }
 }
 

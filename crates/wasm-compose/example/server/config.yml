@@ -1,7 +1,7 @@
 search-paths:
-  - ../service/target/wasm32-unknown-unknown/release
+  - ../service/target/wasm32-wasi/release
 
 instantiations:
   $input:
     arguments:
-      downstream: svc
+      example:service/handler@0.1.0: svc

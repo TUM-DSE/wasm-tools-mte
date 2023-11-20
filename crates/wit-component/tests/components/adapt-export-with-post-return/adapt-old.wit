@@ -1,7 +1,7 @@
 interface new {
-  foo: func() -> string
+  foo: func() -> string;
 }
 
-default world brave-new-world {
-  export new: self.new
+world adapt-old {
+  export new;
 }

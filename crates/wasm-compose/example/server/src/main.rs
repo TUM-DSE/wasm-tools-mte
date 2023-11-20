@@ -8,11 +8,16 @@ use tide::{
     utils::After,
     Request, Response, StatusCode,
 };
-use wasmtime::{component::*, Config, Engine, Store};
 
-wasmtime_component_macro::bindgen!({
+use wasmtime::{component::*, Config, Engine, Store};
+use wasmtime_wasi::preview2::{command, Table, WasiCtx, WasiCtxBuilder, WasiView};
+
+use exports::example::service::*;
+
+wasmtime::component::bindgen!({
     path: "../service.wit",
-    world: "service"
+    world: "service",
+    async: true
 });
 
 /// Represents state stored in the tide application context.
@@ -30,6 +35,7 @@ impl State {
         // Enable component model support in Wasmtime
         let mut config = Config::default();
         config.wasm_component_model(true);
+        config.async_support(true);
 
         // Load the component from the given path
         let engine = Engine::new(&config)?;
@@ -112,25 +118,61 @@ impl ServerApp {
         let body = req.body_bytes().await?;
         let headers = req
             .iter()
-            .map(|(n, v)| (n.as_str().as_bytes(), v.as_str().as_bytes()))
+            .map(|(n, v)| {
+                (
+                    n.as_str().as_bytes().to_vec(),
+                    v.as_str().as_bytes().to_vec(),
+                )
+            })
             .collect::<Vec<_>>();
 
         // Create a new store for the request
         let state = req.state();
-        let linker: Linker<()> = Linker::new(&state.engine);
-        let mut store = Store::new(&state.engine, ());
-        let (service, _) = Service::instantiate(&mut store, &state.component, &linker)?;
+        let mut linker = Linker::new(&state.engine);
+        command::add_to_linker(&mut linker)?;
+
+        let wasi_view = ServerWasiView::new()?;
+        let mut store = Store::new(&state.engine, wasi_view);
+        let (service, _) =
+            Service::instantiate_async(&mut store, &state.component, &linker).await?;
         service
-            .handler
-            .call_execute(
-                &mut store,
-                handler::Request {
-                    headers: &headers,
-                    body: &body,
-                },
-            )?
+            .example_service_handler()
+            .call_execute(&mut store, &handler::Request { headers, body })
+            .await?
             .map(TryInto::try_into)
             .map_err(handler::Error::into_tide)?
+    }
+}
+
+struct ServerWasiView {
+    table: Table,
+    ctx: WasiCtx,
+}
+
+impl ServerWasiView {
+    fn new() -> Result<Self, anyhow::Error> {
+        let mut table = Table::new();
+        let ctx = WasiCtxBuilder::new().inherit_stdio().build(&mut table)?;
+
+        Ok(Self { table, ctx })
+    }
+}
+
+impl WasiView for ServerWasiView {
+    fn table(&self) -> &Table {
+        &self.table
+    }
+
+    fn table_mut(&mut self) -> &mut Table {
+        &mut self.table
+    }
+
+    fn ctx(&self) -> &WasiCtx {
+        &self.ctx
+    }
+
+    fn ctx_mut(&mut self) -> &mut WasiCtx {
+        &mut self.ctx
     }
 }
 

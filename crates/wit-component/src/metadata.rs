@@ -16,32 +16,48 @@
 //! per-language-binding-generation and consumed by slurping up all the
 //! sections during the component creation process.
 //!
-//! Currently the encoding of this custom section is:
+//! Currently the encoding of this custom section is itself a component. The
+//! component has a single export which is a component type which represents the
+//! `world` that was bound during bindings generation. This single export is
+//! used to decode back into a `Resolve` with a WIT representation.
 //!
-//! * First, a version byte (`CURRENT_VERSION`). This is intended to detect
-//!   mismatches between different versions of the binding generator and
-//!   `wit-component` which may or may not become a problem over time.
+//! Currently the component additionally has a custom section named
+//! `wit-component-encoding` (see `CUSTOM_SECTION_NAME`). This section is
+//! currently defined as 2 bytes:
 //!
-//! * Next a string encoding byte.
+//! * The first byte is `CURRENT_VERSION` to help protect against future and
+//!   past changes.
+//! * The second byte indicates the string encoding used for imports/exports as
+//!   part of the bindings process. The mapping is defined by
+//!   `encode_string_encoding`.
 //!
-//! * Next, three strings are encoded. These are the names of the root package,
-//!   document, and world that the bindings were generated for. These strings
-//!   are used as lookups into the next field.
+//! This means that the top-level `encode` function takes a `Resolve`, a
+//! `WorldId`, and a `StringEncoding`. Note that the top-level `decode` function
+//! is slightly difference because it's taking all custom sections in a core
+//! wasm binary, possibly from multiple invocations of bindgen, and unioning
+//! them all together. This means that the output is a `Bindgen` which
+//! represents the union of all previous bindings.
 //!
-//! * Finally the Wasm-encoded representation of a `Resolve` is included in its
-//!   binary form. This is the encoding of a package into wasm, and the bound
-//!   world for the bindings is specified from the prior strings.
+//! The dual of `encode` is the `decode_custom_section` fucntion which decodes
+//! the three arguments originally passed to `encode`.
 
 use crate::validation::BARE_FUNC_MODULE_NAME;
 use crate::{DecodedWasm, StringEncoding};
 use anyhow::{bail, Context, Result};
 use indexmap::IndexMap;
-use wasm_encoder::Encode;
+use std::borrow::Cow;
+use wasm_encoder::{
+    ComponentBuilder, ComponentExportKind, ComponentType, ComponentTypeRef, CustomSection, Encode,
+};
 use wasm_metadata::Producers;
-use wasmparser::BinaryReader;
-use wit_parser::{Document, Package, Resolve, World, WorldId, WorldItem};
+use wasmparser::types::ComponentAnyTypeId;
+use wasmparser::{
+    BinaryReader, ComponentExternalKind, Parser, Payload, ValidPayload, Validator, WasmFeatures,
+};
+use wit_parser::{Package, PackageName, Resolve, World, WorldId, WorldItem};
 
-const CURRENT_VERSION: u8 = 0x02;
+const CURRENT_VERSION: u8 = 0x04;
+const CUSTOM_SECTION_NAME: &str = "wit-component-encoding";
 
 /// The result of decoding binding information from a WebAssembly binary.
 ///
@@ -62,25 +78,27 @@ impl Default for Bindgen {
     fn default() -> Bindgen {
         let mut resolve = Resolve::default();
         let package = resolve.packages.alloc(Package {
-            name: "root".to_string(),
-            url: None,
-            documents: Default::default(),
-        });
-        let document = resolve.documents.alloc(Document {
-            name: "root".to_string(),
+            name: PackageName {
+                namespace: "root".to_string(),
+                name: "root".to_string(),
+                version: None,
+            },
+            docs: Default::default(),
             interfaces: Default::default(),
             worlds: Default::default(),
-            default_world: None,
-            default_interface: None,
-            package: Some(package),
         });
         let world = resolve.worlds.alloc(World {
             name: "root".to_string(),
             docs: Default::default(),
             imports: Default::default(),
             exports: Default::default(),
-            document,
+            includes: Default::default(),
+            include_names: Default::default(),
+            package: Some(package),
         });
+        resolve.packages[package]
+            .worlds
+            .insert("root".to_string(), world);
         Bindgen {
             resolve,
             world,
@@ -122,7 +140,7 @@ pub fn decode(wasm: &[u8]) -> Result<(Vec<u8>, Bindgen)> {
         let payload = payload.context("decoding item in module")?;
         match payload {
             wasmparser::Payload::CustomSection(cs) if cs.name().starts_with("component-type") => {
-                let data = Bindgen::decode(cs.data())
+                let data = Bindgen::decode_custom_section(cs.data())
                     .with_context(|| format!("decoding custom section {}", cs.name()))?;
                 ret.merge(data)
                     .with_context(|| format!("updating metadata for section {}", cs.name()))?;
@@ -150,72 +168,213 @@ pub fn decode(wasm: &[u8]) -> Result<(Vec<u8>, Bindgen)> {
 pub fn encode(
     resolve: &Resolve,
     world: WorldId,
-    encoding: StringEncoding,
-    producers: Option<&Producers>,
+    string_encoding: StringEncoding,
+    extra_producers: Option<&Producers>,
+    use_next_encoding: Option<bool>,
 ) -> Result<Vec<u8>> {
-    let world = &resolve.worlds[world];
-    let doc = &resolve.documents[world.document];
-    let pkg = &resolve.packages[doc.package.unwrap()];
+    enum EncodingFormat {
+        // The encoding of the previous format was:
+        //
+        //  * A version byte, at the time 0x03.
+        //  * A string-encoding byte.
+        //  * A string which is the name of a world.
+        //  * A wasm-encoded WIT package which contains the previous world.
+        //
+        // Note that this branch will be deleted in the near future.
+        Previous,
 
-    assert!(
-        resolve
-            .packages
-            .iter()
-            .filter(|(_, p)| p.name == pkg.name)
-            .count()
-            == 1
-    );
-
-    let mut ret = Vec::new();
-    ret.push(CURRENT_VERSION);
-    ret.push(match encoding {
-        StringEncoding::UTF8 => 0x00,
-        StringEncoding::UTF16 => 0x01,
-        StringEncoding::CompactUTF16 => 0x02,
-    });
-    pkg.name.encode(&mut ret);
-    doc.name.encode(&mut ret);
-    world.name.encode(&mut ret);
-    // This appends a wasm binary encoded Component to the ret:
-    let mut component_builder = crate::encoding::encode_component(resolve, doc.package.unwrap())?;
-
-    if let Some(p) = producers {
-        component_builder.add_producers(p);
+        // The current format.
+        Next,
     }
-    ret.extend(component_builder.finish());
+
+    let format = match use_next_encoding {
+        Some(true) => EncodingFormat::Next,
+        Some(false) => EncodingFormat::Previous,
+        None => match std::env::var("WIT_COMPONENT_NEW_ENCODE") {
+            Ok(s) if s == "1" => EncodingFormat::Next,
+            _ => EncodingFormat::Previous,
+        },
+    };
+
+    let ret = match format {
+        EncodingFormat::Previous => {
+            let world = &resolve.worlds[world];
+            let pkg = &resolve.packages[world.package.unwrap()];
+            assert!(
+                resolve
+                    .packages
+                    .iter()
+                    .filter(|(_, p)| p.name == pkg.name)
+                    .count()
+                    == 1
+            );
+
+            let mut ret = Vec::new();
+            ret.push(0x03);
+            ret.push(encode_string_encoding(string_encoding));
+            world.name.encode(&mut ret);
+            // This appends a wasm binary encoded Component to the ret:
+            let mut component_builder =
+                crate::encoding::encode_component(None, resolve, world.package.unwrap())?;
+
+            let mut producers = crate::base_producers();
+            if let Some(p) = extra_producers {
+                producers.merge(&p);
+            }
+            component_builder.raw_custom_section(&producers.raw_custom_section());
+
+            ret.extend(component_builder.finish());
+            ret
+        }
+        EncodingFormat::Next => {
+            let ty = crate::encoding::encode_world(resolve, world)?;
+
+            let world = &resolve.worlds[world];
+            let mut outer_ty = ComponentType::new();
+            outer_ty.ty().component(&ty);
+            outer_ty.export(
+                &resolve.id_of_name(world.package.unwrap(), &world.name),
+                ComponentTypeRef::Component(0),
+            );
+
+            let mut builder = ComponentBuilder::default();
+
+            let string_encoding = encode_string_encoding(string_encoding);
+            builder.custom_section(&CustomSection {
+                name: CUSTOM_SECTION_NAME.into(),
+                data: Cow::Borrowed(&[CURRENT_VERSION, string_encoding]),
+            });
+
+            let ty = builder.type_component(&outer_ty);
+            builder.export(&world.name, ComponentExportKind::Type, ty, None);
+
+            let mut producers = crate::base_producers();
+            if let Some(p) = extra_producers {
+                producers.merge(&p);
+            }
+            builder.raw_custom_section(&producers.raw_custom_section());
+            builder.finish()
+        }
+    };
+
     Ok(ret)
 }
 
-impl Bindgen {
-    fn decode(data: &[u8]) -> Result<Bindgen> {
-        let mut reader = BinaryReader::new(data);
-        let version = reader.read_u8()?;
-        if version != CURRENT_VERSION {
-            bail!("component-type version {version} does not match supported version {CURRENT_VERSION}");
-        }
-        let encoding = match reader.read_u8()? {
-            0x00 => StringEncoding::UTF8,
-            0x01 => StringEncoding::UTF16,
-            0x02 => StringEncoding::CompactUTF16,
-            byte => bail!("invalid string encoding {byte:#x}"),
-        };
-        let pkg_name = reader.read_string()?;
-        let doc_name = reader.read_string()?;
-        let world_name = reader.read_string()?;
+fn decode_custom_section(wasm: &[u8]) -> Result<(Resolve, WorldId, StringEncoding)> {
+    let mut validator = Validator::new_with_features(WasmFeatures::all());
+    let mut exports = Vec::new();
+    let mut depth = 1;
+    let mut types = None;
+    let mut custom_section = None;
 
-        let (resolve, pkg) = match crate::decode(pkg_name, &data[reader.original_position()..])? {
-            DecodedWasm::WitPackage(resolve, pkg) => (resolve, pkg),
-            DecodedWasm::Component(..) => bail!("expected an encoded wit package"),
-        };
-        let doc = resolve.packages[pkg].documents[doc_name];
-        let world = resolve.documents[doc].worlds[world_name];
-        let metadata = ModuleMetadata::new(&resolve, world, encoding);
-        let producers = wasm_metadata::Producers::from_wasm(&data[reader.original_position()..])?;
+    for payload in Parser::new(0).parse_all(wasm) {
+        let payload = payload?;
+
+        match validator.payload(&payload)? {
+            ValidPayload::Ok => {}
+            ValidPayload::Parser(_) => depth += 1,
+            ValidPayload::End(t) => {
+                depth -= 1;
+                if depth == 0 {
+                    types = Some(t);
+                }
+            }
+            ValidPayload::Func(..) => {}
+        }
+
+        match payload {
+            Payload::ComponentExportSection(s) if depth == 1 => {
+                for export in s {
+                    exports.push(export?);
+                }
+            }
+            Payload::CustomSection(s) if s.name() == CUSTOM_SECTION_NAME => {
+                custom_section = Some(s.data());
+            }
+            _ => {}
+        }
+    }
+    let string_encoding = match custom_section {
+        None => bail!("missing custom section of name `{CUSTOM_SECTION_NAME}`"),
+        Some([CURRENT_VERSION, byte]) => decode_string_encoding(*byte)?,
+        Some([]) => bail!("custom section `{CUSTOM_SECTION_NAME}` in unknown format"),
+        Some([version, ..]) => bail!(
+            "custom section `{CUSTOM_SECTION_NAME}` uses format {version} but only {CURRENT_VERSION} is supported"
+        ),
+    };
+
+    if exports.len() != 1 {
+        bail!("expected one export in component");
+    }
+    if exports[0].kind != ComponentExternalKind::Type {
+        bail!("expected an export of a type");
+    }
+    if exports[0].ty.is_some() {
+        bail!("expected an un-ascribed exported type");
+    }
+    let types = types.as_ref().unwrap();
+    let ty = match types.component_any_type_at(exports[0].index) {
+        ComponentAnyTypeId::Component(c) => c,
+        _ => bail!("expected an exported component type"),
+    };
+
+    let (resolve, world) = crate::decoding::decode_world(types, ty)?;
+    Ok((resolve, world, string_encoding))
+}
+
+fn encode_string_encoding(e: StringEncoding) -> u8 {
+    match e {
+        StringEncoding::UTF8 => 0x00,
+        StringEncoding::UTF16 => 0x01,
+        StringEncoding::CompactUTF16 => 0x02,
+    }
+}
+
+fn decode_string_encoding(byte: u8) -> Result<StringEncoding> {
+    match byte {
+        0x00 => Ok(StringEncoding::UTF8),
+        0x01 => Ok(StringEncoding::UTF16),
+        0x02 => Ok(StringEncoding::CompactUTF16),
+        byte => bail!("invalid string encoding {byte:#x}"),
+    }
+}
+
+impl Bindgen {
+    fn decode_custom_section(data: &[u8]) -> Result<Bindgen> {
+        let wasm;
+        let world;
+        let resolve;
+        let encoding;
+
+        let mut reader = BinaryReader::new(data);
+        match reader.read_u8()? {
+            // Historical 0x03 format where the support here will be deleted in
+            // the future
+            0x03 => {
+                encoding = decode_string_encoding(reader.read_u8()?)?;
+                let world_name = reader.read_string()?;
+                wasm = &data[reader.original_position()..];
+
+                let (r, pkg) = match crate::decode(wasm)? {
+                    DecodedWasm::WitPackage(resolve, pkg) => (resolve, pkg),
+                    DecodedWasm::Component(..) => bail!("expected an encoded wit package"),
+                };
+                resolve = r;
+                world = resolve.packages[pkg].worlds[world_name];
+            }
+
+            // Current format where `data` is a wasm component itself.
+            _ => {
+                wasm = data;
+                (resolve, world, encoding) = decode_custom_section(wasm)?;
+            }
+        }
+
         Ok(Bindgen {
+            metadata: ModuleMetadata::new(&resolve, world, encoding),
+            producers: wasm_metadata::Producers::from_wasm(wasm)?,
             resolve,
             world,
-            metadata,
-            producers,
         })
     }
 
@@ -228,7 +387,7 @@ impl Bindgen {
     ///
     /// Note that at this time there's no support for changing string encodings
     /// between metadata.
-    pub fn merge(&mut self, other: Bindgen) -> Result<()> {
+    pub fn merge(&mut self, other: Bindgen) -> Result<WorldId> {
         let Bindgen {
             resolve,
             world,
@@ -240,7 +399,11 @@ impl Bindgen {
             producers,
         } = other;
 
-        let world = self.resolve.merge(resolve).worlds[world.index()];
+        let world = self
+            .resolve
+            .merge(resolve)
+            .context("failed to merge WIT package sets together")?
+            .worlds[world.index()];
         self.resolve
             .merge_worlds(world, self.world)
             .context("failed to merge worlds from two documents")?;
@@ -275,7 +438,7 @@ impl Bindgen {
             }
         }
 
-        Ok(())
+        Ok(world)
     }
 }
 
@@ -287,6 +450,7 @@ impl ModuleMetadata {
 
         let world = &resolve.worlds[world];
         for (name, item) in world.imports.iter() {
+            let name = resolve.name_world_key(name);
             match item {
                 WorldItem::Function(_) => {
                     let prev = ret
@@ -307,15 +471,16 @@ impl ModuleMetadata {
         }
 
         for (name, item) in world.exports.iter() {
+            let name = resolve.name_world_key(name);
             match item {
                 WorldItem::Function(func) => {
                     let name = func.core_export_name(None).into_owned();
-                    let prev = ret.export_encodings.insert(name, encoding);
+                    let prev = ret.export_encodings.insert(name.clone(), encoding);
                     assert!(prev.is_none());
                 }
                 WorldItem::Interface(i) => {
                     for (_, func) in resolve.interfaces[*i].functions.iter() {
-                        let name = func.core_export_name(Some(name)).into_owned();
+                        let name = func.core_export_name(Some(&name)).into_owned();
                         let prev = ret.export_encodings.insert(name, encoding);
                         assert!(prev.is_none());
                     }

@@ -1,5 +1,6 @@
 // parse-fail
+package foo:foo;
 
 interface foo {
-  type foo = bar
+  type foo = bar;
 }

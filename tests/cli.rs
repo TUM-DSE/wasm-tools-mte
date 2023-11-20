@@ -34,6 +34,12 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
 fn main() {
+    // This test suite can't run on wasm since it involves spawning
+    // subprocesses.
+    if cfg!(target_family = "wasm") {
+        return;
+    }
+
     let mut tests = Vec::new();
     find_tests("tests/cli".as_ref(), &mut tests);
     let filter = std::env::args().nth(1);
@@ -83,7 +89,7 @@ fn run_test(test: &Path, bless: bool) -> Result<()> {
     let contents = std::fs::read_to_string(test)?;
     let line = contents
         .lines()
-        .filter_map(|l| l.strip_prefix(";; RUN: "))
+        .filter_map(|l| l.strip_prefix(";; RUN: ").or(l.strip_prefix("// RUN: ")))
         .next()
         .ok_or_else(|| anyhow!("no line found with `;; RUN: ` directive"))?;
 
@@ -102,10 +108,19 @@ fn run_test(test: &Path, bless: bool) -> Result<()> {
     }
 
     let output = execute(&mut cmd, stdin.as_deref())?;
-    assert_output(bless, &output.stdout, &test.with_extension("wat.stdout"))
-        .context("failed to check stdout expectation (auto-update with BLESS=1)")?;
-    assert_output(bless, &output.stderr, &test.with_extension("wat.stderr"))
-        .context("failed to check stderr expectation (auto-update with BLESS=1)")?;
+    let extension = test.extension().unwrap().to_str().unwrap();
+    assert_output(
+        bless,
+        &output.stdout,
+        &test.with_extension(&format!("{extension}.stdout")),
+    )
+    .context("failed to check stdout expectation (auto-update with BLESS=1)")?;
+    assert_output(
+        bless,
+        &output.stderr,
+        &test.with_extension(&format!("{extension}.stderr")),
+    )
+    .context("failed to check stderr expectation (auto-update with BLESS=1)")?;
     Ok(())
 }
 
@@ -178,7 +193,7 @@ fn find_tests(path: &Path, tests: &mut Vec<PathBuf>) {
             continue;
         }
         match f.path().extension().and_then(|s| s.to_str()) {
-            Some("wat") => {}
+            Some("wat") | Some("wit") => {}
             _ => continue,
         }
         tests.push(f.path());

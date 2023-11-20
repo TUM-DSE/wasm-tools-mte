@@ -8,7 +8,7 @@ license = "Apache-2.0 WITH LLVM-exception"
 name = "wasm-smith"
 readme = "./README.md"
 repository = "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasm-smith"
-version = "0.12.5"
+version = "0.12.23"
 exclude = ["/benches/corpus"]
 
 [[bench]]
@@ -21,15 +21,18 @@ flagset = "0.4"
 indexmap = { workspace = true }
 leb128 = { workspace = true }
 serde = { workspace = true, optional = true }
+serde_derive = { workspace = true, optional = true }
 wasm-encoder = { workspace = true }
 wasmparser = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
-libfuzzer-sys = { workspace = true }
 rand = { workspace = true }
 wasmprinter = { path = "../wasmprinter" }
 wat = { path = "../wat" }
 
+[target.'cfg(not(target_family = "wasm"))'.dev-dependencies]
+libfuzzer-sys = { workspace = true }
+
 [features]
-_internal_cli = ["serde", "flagset/serde"]
+_internal_cli = ["serde", "serde_derive"]

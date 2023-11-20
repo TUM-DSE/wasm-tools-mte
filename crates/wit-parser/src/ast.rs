@@ -1,6 +1,7 @@
 use crate::{Error, UnresolvedPackage};
 use anyhow::{bail, Context, Result};
 use lex::{Span, Token, Tokenizer};
+use semver::Version;
 use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::fmt;
@@ -15,22 +16,36 @@ pub mod toposort;
 pub use lex::validate_id;
 
 pub struct Ast<'a> {
-    pub items: Vec<AstItem<'a>>,
+    package_id: Option<PackageName<'a>>,
+    items: Vec<AstItem<'a>>,
 }
 
 impl<'a> Ast<'a> {
     pub fn parse(lexer: &mut Tokenizer<'a>) -> Result<Self> {
         let mut items = Vec::new();
-        while lexer.clone().next()?.is_some() {
-            let docs = parse_docs(lexer)?;
-            items.push(AstItem::parse(lexer, docs)?);
+        let mut package_id = None;
+        let mut docs = parse_docs(lexer)?;
+        if lexer.eat(Token::Package)? {
+            let package_docs = std::mem::take(&mut docs);
+            package_id = Some(PackageName::parse(lexer, package_docs)?);
+            lexer.expect_semicolon()?;
+            docs = parse_docs(lexer)?;
         }
-        Ok(Self { items })
+        while lexer.clone().next()?.is_some() {
+            items.push(AstItem::parse(lexer, docs)?);
+            docs = parse_docs(lexer)?;
+        }
+        Ok(Self { package_id, items })
     }
 
     fn for_each_path<'b>(
         &'b self,
-        mut f: impl FnMut(Option<&'b Id<'a>>, &'b UsePath<'a>, Option<&[UseName<'a>]>) -> Result<()>,
+        mut f: impl FnMut(
+            Option<&'b Id<'a>>,
+            &'b UsePath<'a>,
+            Option<&'b [UseName<'a>]>,
+            WorldOrInterface,
+        ) -> Result<()>,
     ) -> Result<()> {
         for item in self.items.iter() {
             match item {
@@ -43,7 +58,12 @@ impl<'a> Ast<'a> {
                     let mut exports = Vec::new();
                     for item in world.items.iter() {
                         match item {
-                            WorldItem::Use(u) => f(None, &u.from, Some(&u.names))?,
+                            WorldItem::Use(u) => {
+                                f(None, &u.from, Some(&u.names), WorldOrInterface::Interface)?
+                            }
+                            WorldItem::Include(i) => {
+                                f(Some(&world.name), &i.from, None, WorldOrInterface::World)?
+                            }
                             WorldItem::Type(_) => {}
                             WorldItem::Import(Import { kind, .. }) => imports.push(kind),
                             WorldItem::Export(Export { kind, .. }) => exports.push(kind),
@@ -54,14 +74,19 @@ impl<'a> Ast<'a> {
                         ExternKind::Interface(_, items) => {
                             for item in items {
                                 match item {
-                                    InterfaceItem::Use(u) => f(None, &u.from, Some(&u.names))?,
+                                    InterfaceItem::Use(u) => f(
+                                        None,
+                                        &u.from,
+                                        Some(&u.names),
+                                        WorldOrInterface::Interface,
+                                    )?,
                                     _ => {}
                                 }
                             }
                             Ok(())
                         }
-                        ExternKind::Path(path) => f(None, path, None),
-                        ExternKind::Func(_) => Ok(()),
+                        ExternKind::Path(path) => f(None, path, None, WorldOrInterface::Interface),
+                        ExternKind::Func(..) => Ok(()),
                     };
 
                     for kind in imports {
@@ -74,10 +99,20 @@ impl<'a> Ast<'a> {
                 AstItem::Interface(i) => {
                     for item in i.items.iter() {
                         match item {
-                            InterfaceItem::Use(u) => f(Some(&i.name), &u.from, Some(&u.names))?,
+                            InterfaceItem::Use(u) => f(
+                                Some(&i.name),
+                                &u.from,
+                                Some(&u.names),
+                                WorldOrInterface::Interface,
+                            )?,
                             _ => {}
                         }
                     }
+                }
+                AstItem::Use(u) => {
+                    // At the top-level, we don't know if this is a world or an interface
+                    // It is up to the resolver to decides how to handle this ambiguity.
+                    f(None, &u.item, None, WorldOrInterface::Unknown)?;
                 }
             }
         }
@@ -85,45 +120,93 @@ impl<'a> Ast<'a> {
     }
 }
 
-pub enum AstItem<'a> {
+enum AstItem<'a> {
     Interface(Interface<'a>),
     World(World<'a>),
+    Use(ToplevelUse<'a>),
 }
 
 impl<'a> AstItem<'a> {
     fn parse(tokens: &mut Tokenizer<'a>, docs: Docs<'a>) -> Result<Self> {
-        let mut clone = tokens.clone();
-        let token = match clone.next()? {
-            Some((_span, Token::Default)) => clone.next()?,
-            other => other,
-        };
-        match token {
+        match tokens.clone().next()? {
             Some((_span, Token::Interface)) => Interface::parse(tokens, docs).map(Self::Interface),
             Some((_span, Token::World)) => World::parse(tokens, docs).map(Self::World),
-            other => Err(err_expected(tokens, "`default`, `world` or `interface`", other).into()),
+            Some((_span, Token::Use)) => ToplevelUse::parse(tokens).map(Self::Use),
+            other => Err(err_expected(tokens, "`world`, `interface` or `use`", other).into()),
         }
     }
 }
 
-pub struct World<'a> {
+#[derive(Debug, Clone)]
+struct PackageName<'a> {
+    docs: Docs<'a>,
+    span: Span,
+    namespace: Id<'a>,
+    name: Id<'a>,
+    version: Option<(Span, Version)>,
+}
+
+impl<'a> PackageName<'a> {
+    fn parse(tokens: &mut Tokenizer<'a>, docs: Docs<'a>) -> Result<Self> {
+        let namespace = parse_id(tokens)?;
+        tokens.expect(Token::Colon)?;
+        let name = parse_id(tokens)?;
+        let version = parse_opt_version(tokens)?;
+        Ok(PackageName {
+            docs,
+            span: Span {
+                start: namespace.span.start,
+                end: version
+                    .as_ref()
+                    .map(|(s, _)| s.end)
+                    .unwrap_or(name.span.end),
+            },
+            namespace,
+            name,
+            version,
+        })
+    }
+
+    fn package_name(&self) -> crate::PackageName {
+        crate::PackageName {
+            namespace: self.namespace.name.to_string(),
+            name: self.name.name.to_string(),
+            version: self.version.as_ref().map(|(_, v)| v.clone()),
+        }
+    }
+}
+
+struct ToplevelUse<'a> {
+    item: UsePath<'a>,
+    as_: Option<Id<'a>>,
+}
+
+impl<'a> ToplevelUse<'a> {
+    fn parse(tokens: &mut Tokenizer<'a>) -> Result<Self> {
+        tokens.expect(Token::Use)?;
+        let item = UsePath::parse(tokens)?;
+        let as_ = if tokens.eat(Token::As)? {
+            Some(parse_id(tokens)?)
+        } else {
+            None
+        };
+        tokens.expect_semicolon()?;
+        Ok(ToplevelUse { item, as_ })
+    }
+}
+
+struct World<'a> {
     docs: Docs<'a>,
     name: Id<'a>,
     items: Vec<WorldItem<'a>>,
-    default: bool,
 }
 
 impl<'a> World<'a> {
     fn parse(tokens: &mut Tokenizer<'a>, docs: Docs<'a>) -> Result<Self> {
-        let default = tokens.eat(Token::Default)?;
         tokens.expect(Token::World)?;
         let name = parse_id(tokens)?;
         let items = Self::parse_items(tokens)?;
-        Ok(World {
-            docs,
-            name,
-            items,
-            default,
-        })
+        Ok(World { docs, name, items })
     }
 
     fn parse_items(tokens: &mut Tokenizer<'a>) -> Result<Vec<WorldItem<'a>>> {
@@ -140,11 +223,12 @@ impl<'a> World<'a> {
     }
 }
 
-pub enum WorldItem<'a> {
+enum WorldItem<'a> {
     Import(Import<'a>),
     Export(Export<'a>),
     Use(Use<'a>),
     Type(TypeDef<'a>),
+    Include(Include<'a>),
 }
 
 impl<'a> WorldItem<'a> {
@@ -155,17 +239,20 @@ impl<'a> WorldItem<'a> {
             Some((_span, Token::Use)) => Use::parse(tokens).map(WorldItem::Use),
             Some((_span, Token::Type)) => TypeDef::parse(tokens, docs).map(WorldItem::Type),
             Some((_span, Token::Flags)) => TypeDef::parse_flags(tokens, docs).map(WorldItem::Type),
+            Some((_span, Token::Resource)) => {
+                TypeDef::parse_resource(tokens, docs).map(WorldItem::Type)
+            }
             Some((_span, Token::Record)) => {
                 TypeDef::parse_record(tokens, docs).map(WorldItem::Type)
             }
             Some((_span, Token::Variant)) => {
                 TypeDef::parse_variant(tokens, docs).map(WorldItem::Type)
             }
-            Some((_span, Token::Union)) => TypeDef::parse_union(tokens, docs).map(WorldItem::Type),
             Some((_span, Token::Enum)) => TypeDef::parse_enum(tokens, docs).map(WorldItem::Type),
+            Some((_span, Token::Include)) => Include::parse(tokens).map(WorldItem::Include),
             other => Err(err_expected(
                 tokens,
-                "`import`, `export`, `use`, or type definition",
+                "`import`, `export`, `include`, `use`, or type definition",
                 other,
             )
             .into()),
@@ -173,80 +260,96 @@ impl<'a> WorldItem<'a> {
     }
 }
 
-pub struct Import<'a> {
+struct Import<'a> {
     docs: Docs<'a>,
-    name: Id<'a>,
     kind: ExternKind<'a>,
 }
 
 impl<'a> Import<'a> {
     fn parse(tokens: &mut Tokenizer<'a>, docs: Docs<'a>) -> Result<Import<'a>> {
         tokens.expect(Token::Import)?;
-        let name = parse_id(tokens)?;
-        tokens.expect(Token::Colon)?;
         let kind = ExternKind::parse(tokens)?;
-        Ok(Import { docs, name, kind })
+        Ok(Import { docs, kind })
     }
 }
 
-pub struct Export<'a> {
+struct Export<'a> {
     docs: Docs<'a>,
-    name: Id<'a>,
     kind: ExternKind<'a>,
 }
 
 impl<'a> Export<'a> {
     fn parse(tokens: &mut Tokenizer<'a>, docs: Docs<'a>) -> Result<Export<'a>> {
         tokens.expect(Token::Export)?;
-        let name = parse_id(tokens)?;
-        tokens.expect(Token::Colon)?;
         let kind = ExternKind::parse(tokens)?;
-        Ok(Export { docs, name, kind })
+        Ok(Export { docs, kind })
     }
 }
 
-pub enum ExternKind<'a> {
-    Interface(Span, Vec<InterfaceItem<'a>>),
+enum ExternKind<'a> {
+    Interface(Id<'a>, Vec<InterfaceItem<'a>>),
     Path(UsePath<'a>),
-    Func(Func<'a>),
+    Func(Id<'a>, Func<'a>),
 }
 
 impl<'a> ExternKind<'a> {
     fn parse(tokens: &mut Tokenizer<'a>) -> Result<ExternKind<'a>> {
-        match tokens.clone().next()? {
-            Some((_span, Token::Id | Token::ExplicitId | Token::Pkg | Token::Self_)) => {
-                UsePath::parse(tokens).map(ExternKind::Path)
+        // Create a copy of the token stream to test out if this is a function
+        // or an interface import. In those situations the token stream gets
+        // reset to the state of the clone and we continue down those paths.
+        //
+        // If neither a function nor an interface appears here though then the
+        // clone is thrown away and the original token stream is parsed for an
+        // interface. This will redo the original ID parse and the original
+        // colon parse, but that shouldn't be too too bad perf-wise.
+        let mut clone = tokens.clone();
+        let id = parse_id(&mut clone)?;
+        if clone.eat(Token::Colon)? {
+            // import foo: func(...)
+            if clone.clone().eat(Token::Func)? {
+                *tokens = clone;
+                let ret = ExternKind::Func(id, Func::parse(tokens)?);
+                tokens.expect_semicolon()?;
+                return Ok(ret);
             }
-            Some((_span, Token::Interface)) => {
-                let span = tokens.expect(Token::Interface)?;
-                let items = Interface::parse_items(tokens)?;
-                Ok(ExternKind::Interface(span, items))
+
+            // import foo: interface { ... }
+            if clone.eat(Token::Interface)? {
+                *tokens = clone;
+                return Ok(ExternKind::Interface(id, Interface::parse_items(tokens)?));
             }
-            Some((_span, Token::Func)) => Ok(ExternKind::Func(Func::parse(tokens)?)),
-            other => Err(err_expected(tokens, "path, value, or interface", other).into()),
+        }
+
+        // import foo
+        // import foo/bar
+        // import foo:bar/baz
+        let ret = ExternKind::Path(UsePath::parse(tokens)?);
+        tokens.expect_semicolon()?;
+        Ok(ret)
+    }
+
+    fn span(&self) -> Span {
+        match self {
+            ExternKind::Interface(id, _) => id.span,
+            ExternKind::Path(UsePath::Id(id)) => id.span,
+            ExternKind::Path(UsePath::Package { name, .. }) => name.span,
+            ExternKind::Func(id, _) => id.span,
         }
     }
 }
 
-pub struct Interface<'a> {
+struct Interface<'a> {
     docs: Docs<'a>,
     name: Id<'a>,
     items: Vec<InterfaceItem<'a>>,
-    default: bool,
 }
 
 impl<'a> Interface<'a> {
     fn parse(tokens: &mut Tokenizer<'a>, docs: Docs<'a>) -> Result<Self> {
-        let default = tokens.eat(Token::Default)?;
         tokens.expect(Token::Interface)?;
         let name = parse_id(tokens)?;
         let items = Self::parse_items(tokens)?;
-        Ok(Interface {
-            docs,
-            name,
-            items,
-            default,
-        })
+        Ok(Interface { docs, name, items })
     }
 
     pub(super) fn parse_items(tokens: &mut Tokenizer<'a>) -> Result<Vec<InterfaceItem<'a>>> {
@@ -263,33 +366,70 @@ impl<'a> Interface<'a> {
     }
 }
 
-pub enum InterfaceItem<'a> {
+#[derive(Debug)]
+pub enum WorldOrInterface {
+    World,
+    Interface,
+    Unknown,
+}
+
+enum InterfaceItem<'a> {
     TypeDef(TypeDef<'a>),
-    Value(Value<'a>),
+    Func(NamedFunc<'a>),
     Use(Use<'a>),
 }
 
-pub struct Use<'a> {
-    pub from: UsePath<'a>,
-    pub names: Vec<UseName<'a>>,
+struct Use<'a> {
+    from: UsePath<'a>,
+    names: Vec<UseName<'a>>,
 }
 
-pub enum UsePath<'a> {
-    Self_(Id<'a>),
-    Package {
-        doc: Id<'a>,
-        iface: Option<Id<'a>>,
-    },
-    Dependency {
-        dep: Id<'a>,
-        doc: Id<'a>,
-        iface: Option<Id<'a>>,
-    },
+#[derive(Debug)]
+enum UsePath<'a> {
+    Id(Id<'a>),
+    Package { id: PackageName<'a>, name: Id<'a> },
 }
 
-pub struct UseName<'a> {
-    pub name: Id<'a>,
-    pub as_: Option<Id<'a>>,
+impl<'a> UsePath<'a> {
+    fn parse(tokens: &mut Tokenizer<'a>) -> Result<Self> {
+        let id = parse_id(tokens)?;
+        if tokens.eat(Token::Colon)? {
+            // `foo:bar/baz@1.0`
+            let namespace = id;
+            let pkg_name = parse_id(tokens)?;
+            tokens.expect(Token::Slash)?;
+            let name = parse_id(tokens)?;
+            let version = parse_opt_version(tokens)?;
+            Ok(UsePath::Package {
+                id: PackageName {
+                    docs: Default::default(),
+                    span: Span {
+                        start: namespace.span.start,
+                        end: pkg_name.span.end,
+                    },
+                    namespace,
+                    name: pkg_name,
+                    version,
+                },
+                name,
+            })
+        } else {
+            // `foo`
+            Ok(UsePath::Id(id))
+        }
+    }
+
+    fn name(&self) -> &Id<'a> {
+        match self {
+            UsePath::Id(id) => id,
+            UsePath::Package { name, .. } => name,
+        }
+    }
+}
+
+struct UseName<'a> {
+    name: Id<'a>,
+    as_: Option<Id<'a>>,
 }
 
 impl<'a> Use<'a> {
@@ -314,54 +454,51 @@ impl<'a> Use<'a> {
                 break;
             }
         }
+        tokens.expect_semicolon()?;
         Ok(Use { from, names })
     }
 }
 
-impl<'a> UsePath<'a> {
+struct Include<'a> {
+    from: UsePath<'a>,
+    names: Vec<IncludeName<'a>>,
+}
+
+struct IncludeName<'a> {
+    name: Id<'a>,
+    as_: Id<'a>,
+}
+
+impl<'a> Include<'a> {
     fn parse(tokens: &mut Tokenizer<'a>) -> Result<Self> {
-        match tokens.clone().next()? {
-            Some((_span, Token::Self_)) => {
-                tokens.expect(Token::Self_)?;
-                tokens.expect(Token::Period)?;
-                let name = parse_id(tokens)?;
-                Ok(UsePath::Self_(name))
-            }
-            Some((_span, Token::Pkg)) => {
-                tokens.expect(Token::Pkg)?;
-                tokens.expect(Token::Period)?;
-                let doc = parse_id(tokens)?;
-                let mut clone = tokens.clone();
-                let iface = if clone.eat(Token::Period)? && !clone.eat(Token::LeftBrace)? {
-                    tokens.expect(Token::Period)?;
-                    Some(parse_id(tokens)?)
-                } else {
-                    None
-                };
-                Ok(UsePath::Package { doc, iface })
-            }
-            Some((_span, Token::Id | Token::ExplicitId)) => {
-                let dep = parse_id(tokens)?;
-                tokens.expect(Token::Period)?;
-                let doc = parse_id(tokens)?;
-                let mut clone = tokens.clone();
-                let iface = if clone.eat(Token::Period)? && !clone.eat(Token::LeftBrace)? {
-                    tokens.expect(Token::Period)?;
-                    Some(parse_id(tokens)?)
-                } else {
-                    None
-                };
-                Ok(UsePath::Dependency { dep, doc, iface })
-            }
-            other => return Err(err_expected(tokens, "`self`, `pkg`, or identifier", other).into()),
-        }
+        tokens.expect(Token::Include)?;
+        let from = UsePath::parse(tokens)?;
+
+        let names = if tokens.eat(Token::With)? {
+            parse_list(
+                tokens,
+                Token::LeftBrace,
+                Token::RightBrace,
+                |_docs, tokens| {
+                    let name = parse_id(tokens)?;
+                    tokens.expect(Token::As)?;
+                    let as_ = parse_id(tokens)?;
+                    Ok(IncludeName { name, as_ })
+                },
+            )?
+        } else {
+            tokens.expect_semicolon()?;
+            Vec::new()
+        };
+
+        Ok(Include { from, names })
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Id<'a> {
-    pub name: &'a str,
-    pub span: Span,
+    name: &'a str,
+    span: Span,
 }
 
 impl<'a> From<&'a str> for Id<'a> {
@@ -373,12 +510,22 @@ impl<'a> From<&'a str> for Id<'a> {
     }
 }
 
-#[derive(Default)]
+#[derive(Debug, Clone)]
 pub struct Docs<'a> {
     docs: Vec<Cow<'a, str>>,
+    span: Span,
 }
 
-pub struct TypeDef<'a> {
+impl<'a> Default for Docs<'a> {
+    fn default() -> Self {
+        Self {
+            docs: Default::default(),
+            span: Span { start: 0, end: 0 },
+        }
+    }
+}
+
+struct TypeDef<'a> {
     docs: Docs<'a>,
     name: Id<'a>,
     ty: Type<'a>,
@@ -400,6 +547,8 @@ enum Type<'a> {
     String,
     Name(Id<'a>),
     List(Box<Type<'a>>),
+    Handle(Handle<'a>),
+    Resource(Resource<'a>),
     Record(Record<'a>),
     Flags(Flags<'a>),
     Variant(Variant<'a>),
@@ -409,7 +558,70 @@ enum Type<'a> {
     Result(Result_<'a>),
     Future(Option<Box<Type<'a>>>),
     Stream(Stream<'a>),
-    Union(Union<'a>),
+}
+
+enum Handle<'a> {
+    Own { resource: Id<'a> },
+    Borrow { resource: Id<'a> },
+}
+
+struct Resource<'a> {
+    funcs: Vec<ResourceFunc<'a>>,
+}
+
+enum ResourceFunc<'a> {
+    Method(NamedFunc<'a>),
+    Static(NamedFunc<'a>),
+    Constructor(NamedFunc<'a>),
+}
+
+impl<'a> ResourceFunc<'a> {
+    fn parse(docs: Docs<'a>, tokens: &mut Tokenizer<'a>) -> Result<Self> {
+        match tokens.clone().next()? {
+            Some((span, Token::Constructor)) => {
+                tokens.expect(Token::Constructor)?;
+                tokens.expect(Token::LeftParen)?;
+                let params = parse_list_trailer(tokens, Token::RightParen, |_docs, tokens| {
+                    let name = parse_id(tokens)?;
+                    tokens.expect(Token::Colon)?;
+                    let ty = Type::parse(tokens)?;
+                    Ok((name, ty))
+                })?;
+                tokens.expect_semicolon()?;
+                Ok(ResourceFunc::Constructor(NamedFunc {
+                    docs,
+                    name: Id {
+                        span,
+                        name: "constructor",
+                    },
+                    func: Func {
+                        params,
+                        results: ResultList::Named(Vec::new()),
+                    },
+                }))
+            }
+            Some((_span, Token::Id | Token::ExplicitId)) => {
+                let name = parse_id(tokens)?;
+                tokens.expect(Token::Colon)?;
+                let ctor = if tokens.eat(Token::Static)? {
+                    ResourceFunc::Static
+                } else {
+                    ResourceFunc::Method
+                };
+                let func = Func::parse(tokens)?;
+                tokens.expect_semicolon()?;
+                Ok(ctor(NamedFunc { docs, name, func }))
+            }
+            other => Err(err_expected(tokens, "`constructor` or identifier", other).into()),
+        }
+    }
+
+    fn named_func(&self) -> &NamedFunc<'a> {
+        use ResourceFunc::*;
+        match self {
+            Method(f) | Static(f) | Constructor(f) => f,
+        }
+    }
 }
 
 struct Record<'a> {
@@ -462,20 +674,10 @@ struct Stream<'a> {
     end: Option<Box<Type<'a>>>,
 }
 
-pub struct Value<'a> {
+struct NamedFunc<'a> {
     docs: Docs<'a>,
     name: Id<'a>,
-    kind: ValueKind<'a>,
-}
-
-struct Union<'a> {
-    span: Span,
-    cases: Vec<UnionCase<'a>>,
-}
-
-struct UnionCase<'a> {
-    docs: Docs<'a>,
-    ty: Type<'a>,
+    func: Func<'a>,
 }
 
 type ParamList<'a> = Vec<(Id<'a>, Type<'a>)>;
@@ -485,11 +687,7 @@ enum ResultList<'a> {
     Anon(Type<'a>),
 }
 
-enum ValueKind<'a> {
-    Func(Func<'a>),
-}
-
-pub struct Func<'a> {
+struct Func<'a> {
     params: ParamList<'a>,
     results: ResultList<'a>,
 }
@@ -527,12 +725,6 @@ impl<'a> Func<'a> {
     }
 }
 
-impl<'a> ValueKind<'a> {
-    fn parse(tokens: &mut Tokenizer<'a>) -> Result<ValueKind<'a>> {
-        Func::parse(tokens).map(ValueKind::Func)
-    }
-}
-
 impl<'a> InterfaceItem<'a> {
     fn parse(tokens: &mut Tokenizer<'a>, docs: Docs<'a>) -> Result<InterfaceItem<'a>> {
         match tokens.clone().next()? {
@@ -546,17 +738,17 @@ impl<'a> InterfaceItem<'a> {
             Some((_span, Token::Variant)) => {
                 TypeDef::parse_variant(tokens, docs).map(InterfaceItem::TypeDef)
             }
+            Some((_span, Token::Resource)) => {
+                TypeDef::parse_resource(tokens, docs).map(InterfaceItem::TypeDef)
+            }
             Some((_span, Token::Record)) => {
                 TypeDef::parse_record(tokens, docs).map(InterfaceItem::TypeDef)
             }
-            Some((_span, Token::Union)) => {
-                TypeDef::parse_union(tokens, docs).map(InterfaceItem::TypeDef)
-            }
             Some((_span, Token::Id)) | Some((_span, Token::ExplicitId)) => {
-                Value::parse(tokens, docs).map(InterfaceItem::Value)
+                NamedFunc::parse(tokens, docs).map(InterfaceItem::Func)
             }
             Some((_span, Token::Use)) => Use::parse(tokens).map(InterfaceItem::Use),
-            other => Err(err_expected(tokens, "`type` or `func`", other).into()),
+            other => Err(err_expected(tokens, "`type`, `resource` or `func`", other).into()),
         }
     }
 }
@@ -567,6 +759,7 @@ impl<'a> TypeDef<'a> {
         let name = parse_id(tokens)?;
         tokens.expect(Token::Equals)?;
         let ty = Type::parse(tokens)?;
+        tokens.expect_semicolon()?;
         Ok(TypeDef { docs, name, ty })
     }
 
@@ -584,6 +777,21 @@ impl<'a> TypeDef<'a> {
                 },
             )?,
         });
+        Ok(TypeDef { docs, name, ty })
+    }
+
+    fn parse_resource(tokens: &mut Tokenizer<'a>, docs: Docs<'a>) -> Result<Self> {
+        tokens.expect(Token::Resource)?;
+        let name = parse_id(tokens)?;
+        let mut funcs = Vec::new();
+        if tokens.eat(Token::LeftBrace)? {
+            while !tokens.eat(Token::RightBrace)? {
+                funcs.push(ResourceFunc::parse(parse_docs(tokens)?, tokens)?);
+            }
+        } else {
+            tokens.expect_semicolon()?;
+        }
+        let ty = Type::Resource(Resource { funcs });
         Ok(TypeDef { docs, name, ty })
     }
 
@@ -631,24 +839,6 @@ impl<'a> TypeDef<'a> {
         Ok(TypeDef { docs, name, ty })
     }
 
-    fn parse_union(tokens: &mut Tokenizer<'a>, docs: Docs<'a>) -> Result<Self> {
-        tokens.expect(Token::Union)?;
-        let name = parse_id(tokens)?;
-        let ty = Type::Union(Union {
-            span: name.span,
-            cases: parse_list(
-                tokens,
-                Token::LeftBrace,
-                Token::RightBrace,
-                |docs, tokens| {
-                    let ty = Type::parse(tokens)?;
-                    Ok(UnionCase { docs, ty })
-                },
-            )?,
-        });
-        Ok(TypeDef { docs, name, ty })
-    }
-
     fn parse_enum(tokens: &mut Tokenizer<'a>, docs: Docs<'a>) -> Result<Self> {
         tokens.expect(Token::Enum)?;
         let name = parse_id(tokens)?;
@@ -668,12 +858,13 @@ impl<'a> TypeDef<'a> {
     }
 }
 
-impl<'a> Value<'a> {
+impl<'a> NamedFunc<'a> {
     fn parse(tokens: &mut Tokenizer<'a>, docs: Docs<'a>) -> Result<Self> {
         let name = parse_id(tokens)?;
         tokens.expect(Token::Colon)?;
-        let kind = ValueKind::parse(tokens)?;
-        Ok(Value { docs, name, kind })
+        let func = Func::parse(tokens)?;
+        tokens.expect_semicolon()?;
+        Ok(NamedFunc { docs, name, func })
     }
 }
 
@@ -691,13 +882,79 @@ fn parse_id<'a>(tokens: &mut Tokenizer<'a>) -> Result<Id<'a>> {
     }
 }
 
+fn parse_opt_version(tokens: &mut Tokenizer<'_>) -> Result<Option<(Span, Version)>> {
+    if !tokens.eat(Token::At)? {
+        return Ok(None);
+    }
+    let start = tokens.expect(Token::Integer)?.start;
+    tokens.expect(Token::Period)?;
+    tokens.expect(Token::Integer)?;
+    tokens.expect(Token::Period)?;
+    let end = tokens.expect(Token::Integer)?.end;
+    let mut span = Span { start, end };
+    eat_ids(tokens, Token::Minus, &mut span)?;
+    eat_ids(tokens, Token::Plus, &mut span)?;
+    let string = tokens.get_span(span);
+    let version = Version::parse(string).map_err(|e| Error {
+        span,
+        msg: e.to_string(),
+    })?;
+    return Ok(Some((span, version)));
+
+    fn eat_ids(tokens: &mut Tokenizer<'_>, prefix: Token, end: &mut Span) -> Result<()> {
+        if !tokens.eat(prefix)? {
+            return Ok(());
+        }
+        loop {
+            match tokens.next()? {
+                Some((span, Token::Id)) | Some((span, Token::Integer)) => end.end = span.end,
+                other => break Err(err_expected(tokens, "an id or integer", other).into()),
+            }
+
+            // If there's no trailing period, then this semver identifier is
+            // done.
+            let mut clone = tokens.clone();
+            if !clone.eat(Token::Period)? {
+                break Ok(());
+            }
+
+            // If there's more to the identifier, then eat the period for real
+            // and continue
+            if clone.eat(Token::Id)? || clone.eat(Token::Integer)? {
+                tokens.eat(Token::Period)?;
+                continue;
+            }
+
+            // Otherwise for something like `use foo:bar/baz@1.2.3+foo.{` stop
+            // the parsing here.
+            break Ok(());
+        }
+    }
+}
+
 fn parse_docs<'a>(tokens: &mut Tokenizer<'a>) -> Result<Docs<'a>> {
     let mut docs = Docs::default();
     let mut clone = tokens.clone();
+    let mut started = false;
     while let Some((span, token)) = clone.next_raw()? {
         match token {
             Token::Whitespace => {}
-            Token::Comment => docs.docs.push(tokens.get_span(span).into()),
+            Token::Comment => {
+                let comment = tokens.get_span(span);
+                if comment.starts_with("///") || (comment.starts_with("/**") && comment != "/**/") {
+                    if !started {
+                        docs.span.start = span.start;
+                        started = true;
+                    }
+                    let trailing_ws = comment
+                        .bytes()
+                        .rev()
+                        .take_while(|ch| ch.is_ascii_whitespace())
+                        .count();
+                    docs.span.end = span.end - (trailing_ws as u32);
+                    docs.docs.push(comment.into());
+                }
+            }
             _ => break,
         };
         *tokens = clone.clone();
@@ -808,6 +1065,22 @@ impl<'a> Type<'a> {
                 Ok(Type::Stream(Stream { element, end }))
             }
 
+            // own<T>
+            Some((_span, Token::Own)) => {
+                tokens.expect(Token::LessThan)?;
+                let resource = parse_id(tokens)?;
+                tokens.expect(Token::GreaterThan)?;
+                Ok(Type::Handle(Handle::Own { resource }))
+            }
+
+            // borrow<T>
+            Some((_span, Token::Borrow)) => {
+                tokens.expect(Token::LessThan)?;
+                let resource = parse_id(tokens)?;
+                tokens.expect(Token::GreaterThan)?;
+                Ok(Type::Handle(Handle::Borrow { resource }))
+            }
+
             // `foo`
             Some((span, Token::Id)) => Ok(Type::Name(Id {
                 name: tokens.parse_id(span)?.into(),
@@ -888,13 +1161,13 @@ fn err_expected(
 pub struct SourceMap {
     sources: Vec<Source>,
     offset: u32,
+    require_semicolons: Option<bool>,
 }
 
 #[derive(Clone)]
 struct Source {
     offset: u32,
     path: PathBuf,
-    name: String,
     contents: String,
 }
 
@@ -904,104 +1177,53 @@ impl SourceMap {
         SourceMap::default()
     }
 
+    #[doc(hidden)] // NB: only here for a transitionary period
+    pub fn set_require_semicolons(&mut self, enable: bool) {
+        self.require_semicolons = Some(enable);
+    }
+
     /// Reads the file `path` on the filesystem and appends its contents to this
     /// [`SourceMap`].
-    ///
-    /// This method pushes a new document into the source map. The name of the
-    /// document is derived from the filename of the `path` provided.
     pub fn push_file(&mut self, path: &Path) -> Result<()> {
         let contents = std::fs::read_to_string(path)
             .with_context(|| format!("failed to read file {path:?}"))?;
-        let filename = match path.file_name().and_then(|s| s.to_str()) {
-            Some(stem) => stem,
-            None => bail!("no filename for {path:?}"),
-        };
-        let name = match filename.find('.') {
-            Some(i) => &filename[..i],
-            None => filename,
-        };
-        self.push(path, name, contents);
+        self.push(path, contents);
         Ok(())
     }
 
     /// Appends the given contents with the given path into this source map.
     ///
-    /// Each path added to a [`SourceMap`] will become a document in the final
-    /// package. The `path` provided is not read from the filesystem and is
-    /// instead only used during error messages. The `name` provided is the name
-    /// of the document within the WIT package and must be a valid WIT
-    /// identifier.
-    pub fn push(&mut self, path: &Path, name: &str, contents: impl Into<String>) {
-        let mut contents = contents.into();
-        if path.extension().and_then(|s| s.to_str()) == Some("md") {
-            log::debug!("automatically unwrapping markdown container");
-            contents = unwrap_md(&contents);
-        }
+    /// The `path` provided is not read from the filesystem and is instead only
+    /// used during error messages. Each file added to a [`SourceMap`] is
+    /// used to create the final parsed package namely by unioning all the
+    /// interfaces and worlds defined together. Note that each file has its own
+    /// personal namespace, however, for top-level `use` and such.
+    pub fn push(&mut self, path: &Path, contents: impl Into<String>) {
+        let contents = contents.into();
         let new_offset = self.offset + u32::try_from(contents.len()).unwrap();
         self.sources.push(Source {
             offset: self.offset,
             path: path.to_path_buf(),
             contents,
-            name: name.to_string(),
         });
         self.offset = new_offset;
-
-        fn unwrap_md(contents: &str) -> String {
-            use pulldown_cmark::{CodeBlockKind, CowStr, Event, Options, Parser, Tag};
-
-            let mut wit = String::new();
-            let mut last_pos = 0;
-            let mut in_wit_code_block = false;
-            Parser::new_ext(contents, Options::empty())
-                .into_offset_iter()
-                .for_each(|(event, range)| match (event, range) {
-                    (
-                        Event::Start(Tag::CodeBlock(CodeBlockKind::Fenced(CowStr::Borrowed(
-                            "wit",
-                        )))),
-                        _,
-                    ) => {
-                        in_wit_code_block = true;
-                    }
-                    (Event::Text(text), range) if in_wit_code_block => {
-                        // Ensure that offsets are correct by inserting newlines to
-                        // cover the Markdown content outside of wit code blocks.
-                        for _ in contents[last_pos..range.start].lines() {
-                            wit.push('\n');
-                        }
-                        wit.push_str(&text);
-                        last_pos = range.end;
-                    }
-                    (
-                        Event::End(Tag::CodeBlock(CodeBlockKind::Fenced(CowStr::Borrowed("wit")))),
-                        _,
-                    ) => {
-                        in_wit_code_block = false;
-                    }
-                    _ => {}
-                });
-            wit
-        }
     }
 
     /// Parses the files added to this source map into an [`UnresolvedPackage`].
-    ///
-    /// All files previously added are considered documents of the package to be
-    /// returned.
-    pub fn parse(self, name: &str, url: Option<&str>) -> Result<UnresolvedPackage> {
+    pub fn parse(self) -> Result<UnresolvedPackage> {
         let mut doc = self.rewrite_error(|| {
             let mut resolver = Resolver::default();
             let mut srcs = self.sources.iter().collect::<Vec<_>>();
-            srcs.sort_by_key(|src| &src.name);
+            srcs.sort_by_key(|src| &src.path);
             for src in srcs {
-                let mut tokens = Tokenizer::new(&src.contents, src.offset)
+                let mut tokens = Tokenizer::new(&src.contents, src.offset, self.require_semicolons)
                     .with_context(|| format!("failed to tokenize path: {}", src.path.display()))?;
                 let ast = Ast::parse(&mut tokens)?;
-                resolver.push(&src.name, ast).with_context(|| {
+                resolver.push(ast).with_context(|| {
                     format!("failed to start resolving path: {}", src.path.display())
                 })?;
             }
-            resolver.resolve(name, url)
+            resolver.resolve()
         })?;
         doc.source_map = self;
         Ok(doc)
@@ -1096,4 +1318,23 @@ impl SourceMap {
     pub fn source_files(&self) -> impl Iterator<Item = &Path> {
         self.sources.iter().map(|src| src.path.as_path())
     }
+}
+
+pub(crate) enum AstUsePath {
+    Name(String),
+    Package(crate::PackageName, String),
+}
+
+pub(crate) fn parse_use_path(s: &str) -> Result<AstUsePath> {
+    let mut tokens = Tokenizer::new(s, 0, Some(true))?;
+    let path = UsePath::parse(&mut tokens)?;
+    if tokens.next()?.is_some() {
+        bail!("trailing tokens in path specifier");
+    }
+    Ok(match path {
+        UsePath::Id(id) => AstUsePath::Name(id.name.to_string()),
+        UsePath::Package { id, name } => {
+            AstUsePath::Package(id.package_name(), name.name.to_string())
+        }
+    })
 }

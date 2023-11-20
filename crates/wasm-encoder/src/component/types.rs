@@ -20,7 +20,7 @@ impl ModuleType {
 
     /// Defines an import in this module type.
     pub fn import(&mut self, module: &str, name: &str, ty: EntityType) -> &mut Self {
-        self.bytes.push(0x00);
+        crate::component::imports::push_extern_name_byte(&mut self.bytes, name);
         module.encode(&mut self.bytes);
         name.encode(&mut self.bytes);
         ty.encode(&mut self.bytes);
@@ -190,6 +190,7 @@ pub struct ComponentType {
     num_added: u32,
     core_types_added: u32,
     types_added: u32,
+    instances_added: u32,
 }
 
 impl ComponentType {
@@ -239,34 +240,40 @@ impl ComponentType {
                 kind: ComponentOuterAliasKind::CoreType,
                 ..
             } => self.core_types_added += 1,
+            Alias::InstanceExport {
+                kind: ComponentExportKind::Instance,
+                ..
+            } => self.instances_added += 1,
             _ => {}
         }
         self
     }
 
     /// Defines an import in this component type.
-    pub fn import(&mut self, name: &str, url: &str, ty: ComponentTypeRef) -> &mut Self {
+    pub fn import(&mut self, name: &str, ty: ComponentTypeRef) -> &mut Self {
         self.bytes.push(0x03);
+        crate::component::imports::push_extern_name_byte(&mut self.bytes, name);
         name.encode(&mut self.bytes);
-        url.encode(&mut self.bytes);
         ty.encode(&mut self.bytes);
         self.num_added += 1;
         match ty {
             ComponentTypeRef::Type(..) => self.types_added += 1,
+            ComponentTypeRef::Instance(..) => self.instances_added += 1,
             _ => {}
         }
         self
     }
 
     /// Defines an export in this component type.
-    pub fn export(&mut self, name: &str, url: &str, ty: ComponentTypeRef) -> &mut Self {
+    pub fn export(&mut self, name: &str, ty: ComponentTypeRef) -> &mut Self {
         self.bytes.push(0x04);
+        crate::component::imports::push_extern_name_byte(&mut self.bytes, name);
         name.encode(&mut self.bytes);
-        url.encode(&mut self.bytes);
         ty.encode(&mut self.bytes);
         self.num_added += 1;
         match ty {
             ComponentTypeRef::Type(..) => self.types_added += 1,
+            ComponentTypeRef::Instance(..) => self.instances_added += 1,
             _ => {}
         }
         self
@@ -280,6 +287,12 @@ impl ComponentType {
     /// Gets the number of types that have been added or aliased in this component type.
     pub fn type_count(&self) -> u32 {
         self.types_added
+    }
+
+    /// Gets the number of instances that have been defined in this component
+    /// type through imports, exports, or aliases.
+    pub fn instance_count(&self) -> u32 {
+        self.instances_added
     }
 }
 
@@ -324,8 +337,8 @@ impl InstanceType {
     }
 
     /// Defines an export in this instance type.
-    pub fn export(&mut self, name: &str, url: &str, ty: ComponentTypeRef) -> &mut Self {
-        self.0.export(name, url, ty);
+    pub fn export(&mut self, name: &str, ty: ComponentTypeRef) -> &mut Self {
+        self.0.export(name, ty);
         self
     }
 
@@ -337,6 +350,12 @@ impl InstanceType {
     /// Gets the number of types that have been added or aliased in this instance type.
     pub fn type_count(&self) -> u32 {
         self.0.types_added
+    }
+
+    /// Gets the number of instances that have been imported or exported or
+    /// aliased in this instance type.
+    pub fn instance_count(&self) -> u32 {
+        self.0.instances_added
     }
 
     /// Returns whether or not this instance type is empty.
@@ -441,6 +460,19 @@ impl<'a> ComponentTypeEncoder<'a> {
     #[must_use = "the encoder must be used to encode the type"]
     pub fn defined_type(self) -> ComponentDefinedTypeEncoder<'a> {
         ComponentDefinedTypeEncoder(self.0)
+    }
+
+    /// Define a resource type.
+    pub fn resource(self, rep: ValType, dtor: Option<u32>) {
+        self.0.push(0x3f);
+        rep.encode(self.0);
+        match dtor {
+            Some(i) => {
+                self.0.push(0x01);
+                i.encode(self.0);
+            }
+            None => self.0.push(0x00),
+        }
     }
 }
 
@@ -612,21 +644,6 @@ impl ComponentDefinedTypeEncoder<'_> {
         }
     }
 
-    /// Define a union type.
-    pub fn union<I, T>(self, types: I)
-    where
-        I: IntoIterator<Item = T>,
-        I::IntoIter: ExactSizeIterator,
-        T: Into<ComponentValType>,
-    {
-        let types = types.into_iter();
-        self.0.push(0x6C);
-        types.len().encode(self.0);
-        for ty in types {
-            ty.into().encode(self.0);
-        }
-    }
-
     /// Define an option type.
     pub fn option(self, ty: impl Into<ComponentValType>) {
         self.0.push(0x6B);
@@ -638,6 +655,18 @@ impl ComponentDefinedTypeEncoder<'_> {
         self.0.push(0x6A);
         ok.encode(self.0);
         err.encode(self.0);
+    }
+
+    /// Define a `own` handle type
+    pub fn own(self, idx: u32) {
+        self.0.push(0x69);
+        idx.encode(self.0);
+    }
+
+    /// Define a `borrow` handle type
+    pub fn borrow(self, idx: u32) {
+        self.0.push(0x68);
+        idx.encode(self.0);
     }
 }
 
@@ -720,6 +749,12 @@ impl ComponentTypeSection {
     #[must_use = "the encoder must be used to encode the type"]
     pub fn defined_type(&mut self) -> ComponentDefinedTypeEncoder<'_> {
         self.ty().defined_type()
+    }
+
+    /// Defines a new resource type.
+    pub fn resource(&mut self, rep: ValType, dtor: Option<u32>) -> &mut Self {
+        self.ty().resource(rep, dtor);
+        self
     }
 }
 

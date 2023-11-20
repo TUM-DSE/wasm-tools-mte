@@ -10,8 +10,11 @@
           (export (;4;) "record" (type (eq 3)))
         )
       )
-      (export (;0;) "interface" "pkg:/print-keyword/interface" (instance (type 0)))
+      (export (;0;) "foo:foo/interface" (instance (type 0)))
     )
   )
-  (export (;1;) "print-keyword" "pkg:/print-keyword" (type 0))
+  (export (;1;) "interface" (type 0))
+  (@producers
+    (processed-by "wit-component" "$CARGO_PKG_VERSION")
+  )
 )

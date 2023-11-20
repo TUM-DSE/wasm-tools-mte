@@ -106,7 +106,11 @@ impl Runner<'_> {
         let result = if test.is_dir() {
             resolve.push_dir(test).map(|(id, _)| id)
         } else {
-            UnresolvedPackage::parse_file(test).and_then(|p| resolve.push(p, &Default::default()))
+            let mut map = SourceMap::new();
+            map.set_require_semicolons(true);
+            map.push_file(test)
+                .and_then(|()| map.parse())
+                .and_then(|p| resolve.push(p))
         };
 
         let result = if test.iter().any(|s| s == "parse-fail") {
@@ -119,34 +123,50 @@ impl Runner<'_> {
                             "some generic platform-agnostic error message",
                         );
                     }
-                    normalize(&format!("{:?}", e))
+                    format!("{:?}", e)
                 }
             }
         } else {
             result?;
+            // format json string to human readable
+            let json_result = serde_json::to_string_pretty(&resolve)?;
+            // "foo.wit" => "foo.wit.json"
+            self.read_or_write_to_file(test, &json_result, "json")?;
             return Ok(());
         };
 
         // "foo.wit" => "foo.wit.result"
         // "foo.wit.md" => "foo.wit.md.result"
+        self.read_or_write_to_file(test, &result, "result")?;
+        return Ok(());
+    }
+
+    fn read_or_write_to_file(
+        &mut self,
+        test: &Path,
+        result: &str,
+        extension: &str,
+    ) -> Result<(), anyhow::Error> {
         let result_file = if test.extension() == Some(OsStr::new("md"))
             && test
                 .file_stem()
                 .and_then(|path| Path::new(path).extension())
                 == Some(OsStr::new("wit"))
         {
-            test.with_extension("md.result")
+            test.with_extension(format!("md.{extension}"))
         } else {
-            test.with_extension("wit.result")
+            test.with_extension(format!("wit.{extension}"))
         };
         if env::var_os("BLESS").is_some() {
-            fs::write(&result_file, result)?;
+            let normalized = normalize(&result, extension);
+            fs::write(&result_file, normalized)?;
         } else {
             let expected = fs::read_to_string(&result_file).context(format!(
                 "failed to read test expectation file {:?}\nthis can be fixed with BLESS=1",
                 result_file
             ))?;
-            let expected = normalize(&expected);
+            let expected = normalize(&expected, extension);
+            let result = normalize(&result, extension);
             if expected != result {
                 bail!(
                     "failed test: result is not as expected:{}",
@@ -155,14 +175,21 @@ impl Runner<'_> {
             }
         }
         self.bump_ntests();
-        return Ok(());
-
-        fn normalize(s: &str) -> String {
-            s.replace('\\', "/").replace("\r\n", "\n")
-        }
+        Ok(())
     }
 
     fn bump_ntests(&self) {
         self.ntests.fetch_add(1, SeqCst);
+    }
+}
+
+fn normalize(s: &str, extension: &str) -> String {
+    let s = s.trim();
+    match extension {
+        // .result files have error messages with paths, so normalize Windows \ separators to /
+        "result" => s.replace("\\", "/").replace("\r\n", "\n"),
+
+        // .json files escape strings with \, so leave them alone
+        _ => s.replace("\r\n", "\n"),
     }
 }

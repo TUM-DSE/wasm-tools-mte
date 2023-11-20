@@ -2,6 +2,16 @@ use libfuzzer_sys::arbitrary::{Result, Unstructured};
 use std::fmt::Debug;
 use wasm_smith::{Component, Module, SwarmConfig};
 
+pub mod incremental_parse;
+pub mod mutate;
+pub mod no_traps;
+pub mod print;
+pub mod roundtrip;
+pub mod roundtrip_wit;
+pub mod text_parser;
+pub mod validate;
+pub mod validate_valid_module;
+
 pub fn generate_valid_module(
     u: &mut Unstructured,
     configure: impl FnOnce(&mut SwarmConfig, &mut Unstructured<'_>) -> Result<()>,
@@ -16,6 +26,7 @@ pub fn generate_valid_module(
     config.threads_enabled = u.arbitrary()?;
     config.exceptions_enabled = u.arbitrary()?;
     config.canonicalize_nans = u.arbitrary()?;
+    config.tail_call_enabled = u.arbitrary()?;
 
     configure(&mut config, u)?;
 

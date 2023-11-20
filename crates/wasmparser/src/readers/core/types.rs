@@ -13,125 +13,56 @@
  * limitations under the License.
  */
 
-use crate::limits::{MAX_WASM_FUNCTION_PARAMS, MAX_WASM_FUNCTION_RETURNS};
-use crate::{BinaryReader, FromReader, Result, SectionLimited};
-use std::fmt::Debug;
+use std::fmt::{self, Debug, Write};
 
-/// Represents the types of values in a WebAssembly module.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub enum ValType {
-    /// The value type is i32.
-    I32,
-    /// The value type is i64.
-    I64,
-    /// The value type is f32.
-    F32,
-    /// The value type is f64.
-    F64,
-    /// The value type is v128.
-    V128,
-    /// The value type is a reference. Which type of reference is decided by
-    /// RefType. This is a change in syntax from the function references proposal,
-    /// which now provides FuncRef and ExternRef as sugar for the generic ref
-    /// construct.
-    Ref(RefType),
+use crate::limits::{
+    MAX_WASM_FUNCTION_PARAMS, MAX_WASM_FUNCTION_RETURNS, MAX_WASM_STRUCT_FIELDS,
+    MAX_WASM_SUPERTYPES, MAX_WASM_TYPES,
+};
+use crate::{BinaryReader, BinaryReaderError, FromReader, Result, SectionLimited};
+
+pub(crate) trait Matches {
+    fn matches<'a, F>(&self, other: &Self, type_at: &F) -> bool
+    where
+        F: Fn(u32) -> &'a SubType;
 }
 
-/// A reference type. When the function references feature is disabled, this
-/// only represents funcref and externref, using the following format:
-/// RefType { nullable: true, heap_type: Func | Extern })
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-#[repr(packed)]
-pub struct RefType {
-    /// Whether it's nullable
-    pub nullable: bool,
-    /// The relevant heap type
-    pub heap_type: HeapType,
-}
-
-impl RefType {
-    /// Alias for the wasm `funcref` type.
-    pub const FUNCREF: RefType = RefType {
-        nullable: true,
-        heap_type: HeapType::Func,
-    };
-    /// Alias for the wasm `externref` type.
-    pub const EXTERNREF: RefType = RefType {
-        nullable: true,
-        heap_type: HeapType::Extern,
-    };
-}
-
-impl From<RefType> for ValType {
-    fn from(ty: RefType) -> ValType {
-        ValType::Ref(ty)
-    }
-}
-
-/// Used as a performance optimization in HeapType. Call `.into()` to get the u32
-// A u16 forces 2-byte alignment, which forces HeapType to be 4 bytes,
-// which forces ValType to 5 bytes. This newtype is annotated as unaligned to
-// store the necessary bits compactly
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-#[repr(packed)]
-pub struct PackedIndex(u16);
-
-impl TryFrom<u32> for PackedIndex {
-    type Error = ();
-
-    fn try_from(idx: u32) -> Result<PackedIndex, ()> {
-        idx.try_into().map(PackedIndex).map_err(|_| ())
-    }
-}
-
-impl From<PackedIndex> for u32 {
-    fn from(x: PackedIndex) -> u32 {
-        x.0 as u32
-    }
-}
-
-/// A heap type from function references. When the proposal is disabled, Index
-/// is an invalid type.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub enum HeapType {
-    /// Function type index
-    /// Note: [PackedIndex] may need to be unpacked
-    TypedFunc(PackedIndex),
-    /// From reference types
-    Func,
-    /// From reference types
-    Extern,
-}
+define_core_wasm_types!(u32);
 
 impl ValType {
-    /// Alias for the wasm `funcref` type.
-    pub const FUNCREF: ValType = ValType::Ref(RefType::FUNCREF);
-    /// Alias for the wasm `externref` type.
-    pub const EXTERNREF: ValType = ValType::Ref(RefType::EXTERNREF);
-
-    /// Returns whether this value type is a "reference type".
-    ///
-    /// Only reference types are allowed in tables, for example, and with some
-    /// instructions. Current reference types include `funcref` and `externref`.
-    pub fn is_reference_type(&self) -> bool {
-        matches!(self, ValType::Ref(_))
-    }
-    /// Whether the type is defaultable according to function references
-    /// spec. This amounts to whether it's a non-nullable ref
-    pub fn is_defaultable(&self) -> bool {
-        !matches!(
-            self,
-            ValType::Ref(RefType {
-                nullable: false,
-                ..
-            })
-        )
-    }
-
     pub(crate) fn is_valtype_byte(byte: u8) -> bool {
         match byte {
-            0x7F | 0x7E | 0x7D | 0x7C | 0x7B | 0x70 | 0x6F | 0x6B | 0x6C => true,
+            0x7F | 0x7E | 0x7D | 0x7C | 0x7B | 0x70 | 0x6F | 0x64 | 0x63 | 0x6E | 0x71 | 0x72
+            | 0x73 | 0x6D | 0x6B | 0x6A | 0x6C => true,
             _ => false,
+        }
+    }
+}
+
+impl Matches for ValType {
+    fn matches<'a, F>(&self, other: &Self, type_at: &F) -> bool
+    where
+        F: Fn(u32) -> &'a SubType,
+    {
+        match (self, other) {
+            (Self::Ref(r1), Self::Ref(r2)) => r1.matches(r2, type_at),
+            (a, b) => a == b,
+        }
+    }
+}
+
+impl<'a> FromReader<'a> for StorageType {
+    fn from_reader(reader: &mut BinaryReader<'a>) -> Result<Self> {
+        match reader.peek()? {
+            0x78 => {
+                reader.position += 1;
+                Ok(StorageType::I8)
+            }
+            0x77 => {
+                reader.position += 1;
+                Ok(StorageType::I16)
+            }
+            _ => Ok(StorageType::Val(reader.read()?)),
         }
     }
 }
@@ -159,22 +90,97 @@ impl<'a> FromReader<'a> for ValType {
                 reader.position += 1;
                 Ok(ValType::V128)
             }
-            0x70 | 0x6F | 0x6B | 0x6C => Ok(ValType::Ref(reader.read()?)),
+            0x70 | 0x6F | 0x64 | 0x63 | 0x6E | 0x71 | 0x72 | 0x73 | 0x6D | 0x6B | 0x6A | 0x6C => {
+                Ok(ValType::Ref(reader.read()?))
+            }
             _ => bail!(reader.original_position(), "invalid value type"),
         }
+    }
+}
+
+impl Matches for RefType {
+    fn matches<'a, F>(&self, other: &Self, type_at: &F) -> bool
+    where
+        F: Fn(u32) -> &'a SubType,
+    {
+        self == other
+            || ((other.is_nullable() || !self.is_nullable())
+                && self.heap_type().matches(&other.heap_type(), type_at))
     }
 }
 
 impl<'a> FromReader<'a> for RefType {
     fn from_reader(reader: &mut BinaryReader<'a>) -> Result<Self> {
         match reader.read()? {
-            0x70 => Ok(RefType::FUNCREF),
-            0x6F => Ok(RefType::EXTERNREF),
-            byte @ (0x6B | 0x6C) => Ok(RefType {
-                nullable: byte == 0x6C,
-                heap_type: reader.read()?,
-            }),
+            0x70 => Ok(RefType::FUNC.nullable()),
+            0x6F => Ok(RefType::EXTERN.nullable()),
+            0x6E => Ok(RefType::ANY.nullable()),
+            0x71 => Ok(RefType::NONE.nullable()),
+            0x72 => Ok(RefType::NOEXTERN.nullable()),
+            0x73 => Ok(RefType::NOFUNC.nullable()),
+            0x6D => Ok(RefType::EQ.nullable()),
+            0x6B => Ok(RefType::STRUCT.nullable()),
+            0x6A => Ok(RefType::ARRAY.nullable()),
+            0x6C => Ok(RefType::I31.nullable()),
+            byte @ (0x63 | 0x64) => {
+                let nullable = byte == 0x63;
+                let pos = reader.original_position();
+                RefType::new(nullable, reader.read()?)
+                    .ok_or_else(|| crate::BinaryReaderError::new("type index too large", pos))
+            }
             _ => bail!(reader.original_position(), "malformed reference type"),
+        }
+    }
+}
+
+impl Matches for HeapType {
+    fn matches<'a, F>(&self, other: &Self, type_at: &F) -> bool
+    where
+        F: Fn(u32) -> &'a SubType,
+    {
+        if self == other {
+            return true;
+        }
+
+        use HeapType as HT;
+        match (self, other) {
+            (HT::Eq | HT::I31 | HT::Struct | HT::Array | HT::None, HT::Any) => true,
+            (HT::I31 | HT::Struct | HT::Array | HT::None, HT::Eq) => true,
+            (HT::NoExtern, HT::Extern) => true,
+            (HT::NoFunc, HT::Func) => true,
+            (HT::None, HT::I31 | HT::Array | HT::Struct) => true,
+
+            (HT::Concrete(a), HT::Eq | HT::Any) => matches!(
+                type_at(*a).composite_type,
+                CompositeType::Array(_) | CompositeType::Struct(_)
+            ),
+
+            (HT::Concrete(a), HT::Struct) => {
+                matches!(type_at(*a).composite_type, CompositeType::Struct(_))
+            }
+
+            (HT::Concrete(a), HT::Array) => {
+                matches!(type_at(*a).composite_type, CompositeType::Array(_))
+            }
+
+            (HT::Concrete(a), HT::Func) => {
+                matches!(type_at(*a).composite_type, CompositeType::Func(_))
+            }
+
+            (HT::Concrete(a), HT::Concrete(b)) => type_at(*a)
+                .composite_type
+                .matches(&type_at(*b).composite_type, type_at),
+
+            (HT::None, HT::Concrete(b)) => matches!(
+                type_at(*b).composite_type,
+                CompositeType::Array(_) | CompositeType::Struct(_)
+            ),
+
+            (HT::NoFunc, HT::Concrete(b)) => {
+                matches!(type_at(*b).composite_type, CompositeType::Func(_))
+            }
+
+            _ => false,
         }
     }
 }
@@ -190,88 +196,138 @@ impl<'a> FromReader<'a> for HeapType {
                 reader.position += 1;
                 Ok(HeapType::Extern)
             }
+            0x6E => {
+                reader.position += 1;
+                Ok(HeapType::Any)
+            }
+            0x71 => {
+                reader.position += 1;
+                Ok(HeapType::None)
+            }
+            0x72 => {
+                reader.position += 1;
+                Ok(HeapType::NoExtern)
+            }
+            0x73 => {
+                reader.position += 1;
+                Ok(HeapType::NoFunc)
+            }
+            0x6D => {
+                reader.position += 1;
+                Ok(HeapType::Eq)
+            }
+            0x6B => {
+                reader.position += 1;
+                Ok(HeapType::Struct)
+            }
+            0x6A => {
+                reader.position += 1;
+                Ok(HeapType::Array)
+            }
+            0x6C => {
+                reader.position += 1;
+                Ok(HeapType::I31)
+            }
             _ => {
                 let idx = match u32::try_from(reader.read_var_s33()?) {
                     Ok(idx) => idx,
                     Err(_) => {
-                        bail!(reader.original_position(), "invalid function heap type",);
+                        bail!(reader.original_position(), "invalid indexed ref heap type");
                     }
                 };
-                match idx.try_into() {
-                    Ok(packed) => Ok(HeapType::TypedFunc(packed)),
-                    Err(_) => {
-                        bail!(reader.original_position(), "function index too large");
-                    }
-                }
+                Ok(HeapType::Concrete(idx))
             }
         }
     }
 }
 
-/// Represents a type in a WebAssembly module.
-#[derive(Debug, Clone)]
-pub enum Type {
-    /// The type is for a function.
-    Func(FuncType),
-}
-
-/// Represents a type of a function in a WebAssembly module.
-#[derive(Clone, Eq, PartialEq, Hash)]
-pub struct FuncType {
-    /// The combined parameters and result types.
-    params_results: Box<[ValType]>,
-    /// The number of parameter types.
-    len_params: usize,
-}
-
-impl Debug for FuncType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("FuncType")
-            .field("params", &self.params())
-            .field("returns", &self.results())
-            .finish()
-    }
-}
-
-impl FuncType {
-    /// Creates a new [`FuncType`] from the given `params` and `results`.
-    pub fn new<P, R>(params: P, results: R) -> Self
+impl Matches for SubType {
+    fn matches<'a, F>(&self, other: &Self, type_at: &F) -> bool
     where
-        P: IntoIterator<Item = ValType>,
-        R: IntoIterator<Item = ValType>,
+        F: Fn(u32) -> &'a SubType,
     {
-        let mut buffer = params.into_iter().collect::<Vec<_>>();
-        let len_params = buffer.len();
-        buffer.extend(results);
-        Self {
-            params_results: buffer.into(),
-            len_params,
+        !other.is_final && self.composite_type.matches(&other.composite_type, type_at)
+    }
+}
+
+impl Matches for CompositeType {
+    fn matches<'a, F>(&self, other: &Self, type_at: &F) -> bool
+    where
+        F: Fn(u32) -> &'a SubType,
+    {
+        match (self, other) {
+            (CompositeType::Func(a), CompositeType::Func(b)) => a.matches(b, type_at),
+            (CompositeType::Array(a), CompositeType::Array(b)) => a.matches(b, type_at),
+            (CompositeType::Struct(a), CompositeType::Struct(b)) => a.matches(b, type_at),
+            _ => false,
         }
     }
+}
 
-    /// Creates a new [`FuncType`] fom its raw parts.
-    ///
-    /// # Panics
-    ///
-    /// If `len_params` is greater than the length of `params_results` combined.
-    pub(crate) fn from_raw_parts(params_results: Box<[ValType]>, len_params: usize) -> Self {
-        assert!(len_params <= params_results.len());
-        Self {
-            params_results,
-            len_params,
+impl Matches for FuncType {
+    fn matches<'a, F>(&self, other: &Self, type_at: &F) -> bool
+    where
+        F: Fn(u32) -> &'a SubType,
+    {
+        self.params().len() == other.params().len()
+            && self.results().len() == other.results().len()
+            // Note: per GC spec, function subtypes are contravariant in their parameter types.
+            // Also see https://en.wikipedia.org/wiki/Covariance_and_contravariance_(computer_science)
+            && self
+                .params()
+                .iter()
+                .zip(other.params())
+                .all(|(a, b)| b.matches(a, type_at))
+            && self
+                .results()
+                .iter()
+                .zip(other.results())
+                .all(|(a, b)| a.matches(b, type_at))
+    }
+}
+
+impl Matches for ArrayType {
+    fn matches<'a, F>(&self, other: &Self, type_at: &F) -> bool
+    where
+        F: Fn(u32) -> &'a SubType,
+    {
+        self.0.matches(&other.0, type_at)
+    }
+}
+
+impl Matches for FieldType {
+    fn matches<'a, F>(&self, other: &Self, type_at: &F) -> bool
+    where
+        F: Fn(u32) -> &'a SubType,
+    {
+        (other.mutable || !self.mutable) && self.element_type.matches(&other.element_type, type_at)
+    }
+}
+
+impl Matches for StorageType {
+    fn matches<'a, F>(&self, other: &Self, type_at: &F) -> bool
+    where
+        F: Fn(u32) -> &'a SubType,
+    {
+        match (self, other) {
+            (Self::Val(a), Self::Val(b)) => a.matches(b, type_at),
+            (a @ (Self::I8 | Self::I16 | Self::Val(_)), b) => a == b,
         }
     }
+}
 
-    /// Returns a shared slice to the parameter types of the [`FuncType`].
-    #[inline]
-    pub fn params(&self) -> &[ValType] {
-        &self.params_results[..self.len_params]
-    }
-
-    /// Returns a shared slice to the result types of the [`FuncType`].
-    #[inline]
-    pub fn results(&self) -> &[ValType] {
-        &self.params_results[self.len_params..]
+impl Matches for StructType {
+    fn matches<'a, F>(&self, other: &Self, type_at: &F) -> bool
+    where
+        F: Fn(u32) -> &'a SubType,
+    {
+        // Note: Structure types support width and depth subtyping.
+        self.fields.len() >= other.fields.len()
+            && self
+                .fields
+                .iter()
+                .zip(other.fields.iter())
+                .all(|(a, b)| a.matches(b, type_at))
     }
 }
 
@@ -353,13 +409,88 @@ pub struct TagType {
 }
 
 /// A reader for the type section of a WebAssembly module.
-pub type TypeSectionReader<'a> = SectionLimited<'a, Type>;
+pub type TypeSectionReader<'a> = SectionLimited<'a, RecGroup>;
 
-impl<'a> FromReader<'a> for Type {
+impl<'a> TypeSectionReader<'a> {
+    /// Returns an iterator over this type section which will only yield
+    /// function types and any usage of GC types from the GC proposal will
+    /// be translated into an error.
+    pub fn into_iter_err_on_gc_types(self) -> impl Iterator<Item = Result<FuncType>> + 'a {
+        self.into_iter_with_offsets().map(|item| {
+            let (offset, group) = item?;
+            let mut types = group.into_types();
+            let ty = match (types.next(), types.next()) {
+                (Some(ty), None) => ty,
+                _ => bail!(offset, "gc proposal not supported"),
+            };
+            if !ty.is_final || ty.supertype_idx.is_some() {
+                bail!(offset, "gc proposal not supported");
+            }
+            match ty.composite_type {
+                CompositeType::Func(f) => Ok(f),
+                CompositeType::Array(_) | CompositeType::Struct(_) => {
+                    bail!(offset, "gc proposal not supported");
+                }
+            }
+        })
+    }
+}
+
+impl<'a> FromReader<'a> for CompositeType {
     fn from_reader(reader: &mut BinaryReader<'a>) -> Result<Self> {
+        read_composite_type(reader.read_u8()?, reader)
+    }
+}
+
+fn read_composite_type(
+    opcode: u8,
+    reader: &mut BinaryReader,
+) -> Result<CompositeType, BinaryReaderError> {
+    Ok(match opcode {
+        0x60 => CompositeType::Func(reader.read()?),
+        0x5e => CompositeType::Array(reader.read()?),
+        0x5f => CompositeType::Struct(reader.read()?),
+        x => return reader.invalid_leading_byte(x, "type"),
+    })
+}
+
+impl<'a> FromReader<'a> for RecGroup {
+    fn from_reader(reader: &mut BinaryReader<'a>) -> Result<Self> {
+        match reader.peek()? {
+            0x4e => {
+                reader.read_u8()?;
+                let types = reader.read_iter(MAX_WASM_TYPES, "rec group types")?;
+                Ok(RecGroup::explicit(types.collect::<Result<_>>()?))
+            }
+            _ => Ok(RecGroup::implicit(reader.read()?)),
+        }
+    }
+}
+
+impl<'a> FromReader<'a> for SubType {
+    fn from_reader(reader: &mut BinaryReader<'a>) -> Result<Self> {
+        let pos = reader.original_position();
         Ok(match reader.read_u8()? {
-            0x60 => Type::Func(reader.read()?),
-            x => return reader.invalid_leading_byte(x, "type"),
+            opcode @ (0x4f | 0x50) => {
+                let idx_iter = reader.read_iter(MAX_WASM_SUPERTYPES, "supertype idxs")?;
+                let idxs = idx_iter.collect::<Result<Vec<u32>>>()?;
+                if idxs.len() > 1 {
+                    return Err(BinaryReaderError::new(
+                        "multiple supertypes not supported",
+                        pos,
+                    ));
+                }
+                SubType {
+                    is_final: opcode == 0x4f,
+                    supertype_idx: idxs.first().copied(),
+                    composite_type: read_composite_type(reader.read_u8()?, reader)?,
+                }
+            }
+            opcode => SubType {
+                is_final: true,
+                supertype_idx: None,
+                composite_type: read_composite_type(opcode, reader)?,
+            },
         })
     }
 }
@@ -376,5 +507,38 @@ impl<'a> FromReader<'a> for FuncType {
             params_results.push(result?);
         }
         Ok(FuncType::from_raw_parts(params_results.into(), len_params))
+    }
+}
+
+impl<'a> FromReader<'a> for FieldType {
+    fn from_reader(reader: &mut BinaryReader<'a>) -> Result<Self> {
+        let element_type = reader.read()?;
+        let mutable = reader.read_u8()?;
+        Ok(FieldType {
+            element_type,
+            mutable: match mutable {
+                0 => false,
+                1 => true,
+                _ => bail!(
+                    reader.original_position(),
+                    "invalid mutability byte for array type"
+                ),
+            },
+        })
+    }
+}
+
+impl<'a> FromReader<'a> for ArrayType {
+    fn from_reader(reader: &mut BinaryReader<'a>) -> Result<Self> {
+        Ok(ArrayType(FieldType::from_reader(reader)?))
+    }
+}
+
+impl<'a> FromReader<'a> for StructType {
+    fn from_reader(reader: &mut BinaryReader<'a>) -> Result<Self> {
+        let fields = reader.read_iter(MAX_WASM_STRUCT_FIELDS, "struct fields")?;
+        Ok(StructType {
+            fields: fields.collect::<Result<_>>()?,
+        })
     }
 }

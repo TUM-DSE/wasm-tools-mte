@@ -1,20 +1,23 @@
-interface shared {
-  type foo = u32
+package foo:foo;
+
+interface shared-items {
+  type foo = u32;
 }
 
 interface i1 {
-  use self.shared.{foo}
+  use shared-items.{foo};
 
-  a: func() -> foo
+  a: func() -> foo;
 }
 
 interface i2 {
-  use self.shared.{foo}
+  use shared-items.{foo};
 
-  a: func() -> foo
+  a: func() -> foo;
 }
 
 world the-world {
-  import i1: self.i1
-  import i2: self.i2
+  import i1;
+  import i2;
+  import a: func();
 }

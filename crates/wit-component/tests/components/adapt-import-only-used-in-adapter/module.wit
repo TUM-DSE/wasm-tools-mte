@@ -1,4 +1,6 @@
-default world foo {
-  import foo: func(x: string)
-  export bar: func()
+package foo:foo;
+
+world module {
+  import foo: func(x: string);
+  export bar: func();
 }

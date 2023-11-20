@@ -9,8 +9,13 @@
           (export (;0;) "my-function" (func (type 2)))
         )
       )
-      (export (;0;) "foo" "pkg:/exports/foo" (instance (type 0)))
-      (type (;1;)
+      (export (;0;) "foo:foo/foo" (instance (type 0)))
+    )
+  )
+  (export (;1;) "foo" (type 0))
+  (type (;2;)
+    (component
+      (type (;0;)
         (component
           (type (;0;)
             (instance
@@ -20,11 +25,14 @@
               (export (;0;) "my-function" (func (type 2)))
             )
           )
-          (export (;0;) "foo" "pkg:/exports/foo" (instance (type 0)))
+          (export (;0;) "foo:foo/foo" (instance (type 0)))
         )
       )
-      (export (;0;) "export-foo" "pkg:/exports/export-foo" (component (type 1)))
+      (export (;0;) "foo:foo/export-foo" (component (type 0)))
     )
   )
-  (export (;1;) "exports" "pkg:/exports" (type 0))
+  (export (;3;) "export-foo" (type 2))
+  (@producers
+    (processed-by "wit-component" "$CARGO_PKG_VERSION")
+  )
 )

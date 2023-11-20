@@ -107,7 +107,7 @@
       (export "A" (func))
     ))
   )
-  "export name `A` conflicts with previous export name `a`")
+  "export name `A` conflicts with previous name `a`")
 
 (assert_invalid
   (component
@@ -116,7 +116,7 @@
       (import "a" (func))
     ))
   )
-  "import name `a` conflicts with previous import name `A`")
+  "import name `a` conflicts with previous name `A`")
 
 (assert_invalid
   (component $c
@@ -195,7 +195,7 @@
       (export "FOO-bar-BAZ" (func))
     ))
   )
-  "export name `FOO-bar-BAZ` conflicts with previous export name `foo-BAR-baz`")
+  "export name `FOO-bar-BAZ` conflicts with previous name `foo-BAR-baz`")
 
 (assert_invalid
   (component $c
@@ -289,3 +289,33 @@
     (export "b" (type (eq 0)))
   ))
 )
+
+(assert_invalid
+  (component
+    (type (variant))
+  )
+  "variant type must have at least one case")
+
+(assert_invalid
+  (component
+    (type (enum))
+  )
+  "enum type must have at least one variant")
+
+(assert_invalid
+  (component
+    (type (record))
+  )
+  "record type must have at least one field")
+
+(assert_invalid
+  (component
+    (type (flags))
+  )
+  "flags must have at least one entry")
+
+(assert_invalid
+  (component
+    (type (tuple))
+  )
+  "tuple type must have at least one type")

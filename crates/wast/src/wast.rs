@@ -22,7 +22,7 @@ impl<'a> Parse<'a> for Wast<'a> {
 
         // If it looks like a directive token is in the stream then we parse a
         // bunch of directives, otherwise assume this is an inline module.
-        if parser.peek2::<WastDirectiveToken>() {
+        if parser.peek2::<WastDirectiveToken>()? {
             while !parser.is_empty() {
                 directives.push(parser.parens(|p| p.parse())?);
             }
@@ -37,16 +37,16 @@ impl<'a> Parse<'a> for Wast<'a> {
 struct WastDirectiveToken;
 
 impl Peek for WastDirectiveToken {
-    fn peek(cursor: Cursor<'_>) -> bool {
-        let kw = match cursor.keyword() {
+    fn peek(cursor: Cursor<'_>) -> Result<bool> {
+        let kw = match cursor.keyword()? {
             Some((kw, _)) => kw,
-            None => return false,
+            None => return Ok(false),
         };
-        kw.starts_with("assert_")
+        Ok(kw.starts_with("assert_")
             || kw == "module"
             || kw == "component"
             || kw == "register"
-            || kw == "invoke"
+            || kw == "invoke")
     }
 
     fn display() -> &'static str {
@@ -102,6 +102,11 @@ pub enum WastDirective<'a> {
         span: Span,
         exec: WastExecute<'a>,
     },
+    Thread(WastThread<'a>),
+    Wait {
+        span: Span,
+        thread: Id<'a>,
+    },
 }
 
 impl WastDirective<'_> {
@@ -119,8 +124,10 @@ impl WastDirective<'_> {
             | WastDirective::AssertExhaustion { span, .. }
             | WastDirective::AssertUnlinkable { span, .. }
             | WastDirective::AssertInvalid { span, .. }
-            | WastDirective::AssertException { span, .. } => *span,
+            | WastDirective::AssertException { span, .. }
+            | WastDirective::Wait { span, .. } => *span,
             WastDirective::Invoke(i) => i.span,
+            WastDirective::Thread(t) => t.span,
         }
     }
 }
@@ -128,39 +135,39 @@ impl WastDirective<'_> {
 impl<'a> Parse<'a> for WastDirective<'a> {
     fn parse(parser: Parser<'a>) -> Result<Self> {
         let mut l = parser.lookahead1();
-        if l.peek::<kw::module>() || l.peek::<kw::component>() {
+        if l.peek::<kw::module>()? || l.peek::<kw::component>()? {
             Ok(WastDirective::Wat(parser.parse()?))
-        } else if l.peek::<kw::assert_malformed>() {
+        } else if l.peek::<kw::assert_malformed>()? {
             let span = parser.parse::<kw::assert_malformed>()?.0;
             Ok(WastDirective::AssertMalformed {
                 span,
                 module: parser.parens(|p| p.parse())?,
                 message: parser.parse()?,
             })
-        } else if l.peek::<kw::assert_invalid>() {
+        } else if l.peek::<kw::assert_invalid>()? {
             let span = parser.parse::<kw::assert_invalid>()?.0;
             Ok(WastDirective::AssertInvalid {
                 span,
                 module: parser.parens(|p| p.parse())?,
                 message: parser.parse()?,
             })
-        } else if l.peek::<kw::register>() {
+        } else if l.peek::<kw::register>()? {
             let span = parser.parse::<kw::register>()?.0;
             Ok(WastDirective::Register {
                 span,
                 name: parser.parse()?,
                 module: parser.parse()?,
             })
-        } else if l.peek::<kw::invoke>() {
+        } else if l.peek::<kw::invoke>()? {
             Ok(WastDirective::Invoke(parser.parse()?))
-        } else if l.peek::<kw::assert_trap>() {
+        } else if l.peek::<kw::assert_trap>()? {
             let span = parser.parse::<kw::assert_trap>()?.0;
             Ok(WastDirective::AssertTrap {
                 span,
                 exec: parser.parens(|p| p.parse())?,
                 message: parser.parse()?,
             })
-        } else if l.peek::<kw::assert_return>() {
+        } else if l.peek::<kw::assert_return>()? {
             let span = parser.parse::<kw::assert_return>()?.0;
             let exec = parser.parens(|p| p.parse())?;
             let mut results = Vec::new();
@@ -172,25 +179,33 @@ impl<'a> Parse<'a> for WastDirective<'a> {
                 exec,
                 results,
             })
-        } else if l.peek::<kw::assert_exhaustion>() {
+        } else if l.peek::<kw::assert_exhaustion>()? {
             let span = parser.parse::<kw::assert_exhaustion>()?.0;
             Ok(WastDirective::AssertExhaustion {
                 span,
                 call: parser.parens(|p| p.parse())?,
                 message: parser.parse()?,
             })
-        } else if l.peek::<kw::assert_unlinkable>() {
+        } else if l.peek::<kw::assert_unlinkable>()? {
             let span = parser.parse::<kw::assert_unlinkable>()?.0;
             Ok(WastDirective::AssertUnlinkable {
                 span,
                 module: parser.parens(parse_wat)?,
                 message: parser.parse()?,
             })
-        } else if l.peek::<kw::assert_exception>() {
+        } else if l.peek::<kw::assert_exception>()? {
             let span = parser.parse::<kw::assert_exception>()?.0;
             Ok(WastDirective::AssertException {
                 span,
                 exec: parser.parens(|p| p.parse())?,
+            })
+        } else if l.peek::<kw::thread>()? {
+            Ok(WastDirective::Thread(parser.parse()?))
+        } else if l.peek::<kw::wait>()? {
+            let span = parser.parse::<kw::wait>()?.0;
+            Ok(WastDirective::Wait {
+                span,
+                thread: parser.parse()?,
             })
         } else {
             Err(l.error())
@@ -212,11 +227,11 @@ pub enum WastExecute<'a> {
 impl<'a> Parse<'a> for WastExecute<'a> {
     fn parse(parser: Parser<'a>) -> Result<Self> {
         let mut l = parser.lookahead1();
-        if l.peek::<kw::invoke>() {
+        if l.peek::<kw::invoke>()? {
             Ok(WastExecute::Invoke(parser.parse()?))
-        } else if l.peek::<kw::module>() || l.peek::<kw::component>() {
+        } else if l.peek::<kw::module>()? || l.peek::<kw::component>()? {
             Ok(WastExecute::Wat(parse_wat(parser)?))
-        } else if l.peek::<kw::get>() {
+        } else if l.peek::<kw::get>()? {
             parser.parse::<kw::get>()?;
             Ok(WastExecute::Get {
                 module: parser.parse()?,
@@ -235,7 +250,7 @@ fn parse_wat(parser: Parser) -> Result<Wat> {
     // the parens. Instead we can skip the sugar that `Wat` has for simply a
     // list of fields (no `(module ...)` container) and just parse the `Module`
     // itself.
-    if parser.peek::<kw::component>() {
+    if parser.peek::<kw::component>()? {
         Ok(Wat::Component(parser.parse()?))
     } else {
         Ok(Wat::Module(parser.parse()?))
@@ -308,8 +323,8 @@ impl QuoteWat<'_> {
 
 impl<'a> Parse<'a> for QuoteWat<'a> {
     fn parse(parser: Parser<'a>) -> Result<Self> {
-        if parser.peek2::<kw::quote>() {
-            let ctor = if parser.peek::<kw::component>() {
+        if parser.peek2::<kw::quote>()? {
+            let ctor = if parser.peek::<kw::component>()? {
                 parser.parse::<kw::component>()?;
                 QuoteWat::QuoteComponent
             } else {
@@ -339,7 +354,7 @@ pub enum WastArg<'a> {
 
 impl<'a> Parse<'a> for WastArg<'a> {
     fn parse(parser: Parser<'a>) -> Result<Self> {
-        if parser.peek::<WastArgCore<'_>>() {
+        if parser.peek::<WastArgCore<'_>>()? {
             Ok(WastArg::Core(parser.parse()?))
         } else {
             Ok(WastArg::Component(parser.parse()?))
@@ -356,10 +371,50 @@ pub enum WastRet<'a> {
 
 impl<'a> Parse<'a> for WastRet<'a> {
     fn parse(parser: Parser<'a>) -> Result<Self> {
-        if parser.peek::<WastRetCore<'_>>() {
+        if parser.peek::<WastRetCore<'_>>()? {
             Ok(WastRet::Core(parser.parse()?))
         } else {
             Ok(WastRet::Component(parser.parse()?))
         }
+    }
+}
+
+#[derive(Debug)]
+#[allow(missing_docs)]
+pub struct WastThread<'a> {
+    pub span: Span,
+    pub name: Id<'a>,
+    pub shared_module: Option<Id<'a>>,
+    pub directives: Vec<WastDirective<'a>>,
+}
+
+impl<'a> Parse<'a> for WastThread<'a> {
+    fn parse(parser: Parser<'a>) -> Result<Self> {
+        parser.depth_check()?;
+        let span = parser.parse::<kw::thread>()?.0;
+        let name = parser.parse()?;
+
+        let shared_module = if parser.peek2::<kw::shared>()? {
+            let name = parser.parens(|p| {
+                p.parse::<kw::shared>()?;
+                p.parens(|p| {
+                    p.parse::<kw::module>()?;
+                    p.parse()
+                })
+            })?;
+            Some(name)
+        } else {
+            None
+        };
+        let mut directives = Vec::new();
+        while !parser.is_empty() {
+            directives.push(parser.parens(|p| p.parse())?);
+        }
+        Ok(WastThread {
+            span,
+            name,
+            shared_module,
+            directives,
+        })
     }
 }

@@ -1,5 +1,5 @@
-default world brave-new-world {
+world adapt-old {
   import new: interface {
-    read: func() -> list<u8>
+    read: func() -> list<u8>;
   }
 }

@@ -13,8 +13,13 @@
           (export (;3;) "float64-result" (func (type 3)))
         )
       )
-      (export (;0;) "floats" "pkg:/floats/floats" (instance (type 0)))
-      (type (;1;)
+      (export (;0;) "foo:floats/floats" (instance (type 0)))
+    )
+  )
+  (export (;1;) "floats" (type 0))
+  (type (;2;)
+    (component
+      (type (;0;)
         (component
           (type (;0;)
             (instance
@@ -28,11 +33,14 @@
               (export (;3;) "float64-result" (func (type 3)))
             )
           )
-          (import "floats" "pkg:/floats/floats" (instance (type 0)))
+          (import "foo:floats/floats" (instance (;0;) (type 0)))
         )
       )
-      (export (;0;) "floats-world" "pkg:/floats/floats-world" (component (type 1)))
+      (export (;0;) "foo:floats/floats-world" (component (type 0)))
     )
   )
-  (export (;1;) "floats" "pkg:/floats" (type 0))
+  (export (;3;) "floats-world" (type 2))
+  (@producers
+    (processed-by "wit-component" "$CARGO_PKG_VERSION")
+  )
 )

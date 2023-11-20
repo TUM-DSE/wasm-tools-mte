@@ -43,25 +43,28 @@
 
 (component
   (import "a" (func))
-  (export "b" "https://example.com" (func 0))
+  (export (interface "wasi:http/types@2.0.0") (func 0))
 )
 
-;; Empty URLs are treated as no URL
+;; import/exports can overlap on ids
 (component
-  (import "a" (func))
-  (export "b" "" (func 0))
+  (import (interface "wasi:http/types@2.0.0") (func))
+  (export (interface "wasi:http/types@2.0.0") (func 0))
 )
 
+;; cannot export some types of strings
 (assert_invalid
-  (component
-    (import "a" (func))
-    (export "b" "foo" (func 0))
-  )
-  "relative URL without a base")
-
+  (component (type (component (export "integrity=<sha256-a>" (func)))))
+  "not a valid export name")
 (assert_invalid
-  (component
-    (import "a" "https://example.com" (func))
-    (import "b" "https://example.com" (func))
-  )
-  "duplicate import URL `https://example.com/`")
+  (component (type (component (export "url=<x>" (func)))))
+  "not a valid export name")
+(assert_invalid
+  (component (type (component (export "relative-url=<x>" (func)))))
+  "not a valid export name")
+(assert_invalid
+  (component (type (component (export "locked-dep=<a:b>" (func)))))
+  "not a valid export name")
+(assert_invalid
+  (component (type (component (export "unlocked-dep=<a:b>" (func)))))
+  "not a valid export name")

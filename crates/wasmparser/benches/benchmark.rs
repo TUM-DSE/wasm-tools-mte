@@ -4,10 +4,7 @@ use once_cell::unsync::Lazy;
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
-use wasmparser::{
-    DataKind, ElementKind, HeapType, Parser, Payload, ValType, Validator, VisitOperator,
-    WasmFeatures,
-};
+use wasmparser::{DataKind, ElementKind, Parser, Payload, Validator, VisitOperator, WasmFeatures};
 
 /// A benchmark input.
 pub struct BenchmarkInput {
@@ -139,7 +136,7 @@ fn read_all_wasm(wasm: &[u8]) -> Result<()> {
                                 op?;
                             }
                         }
-                        wasmparser::ElementItems::Expressions(r) => {
+                        wasmparser::ElementItems::Expressions(_, r) => {
                             for op in r {
                                 op?;
                             }
@@ -235,7 +232,24 @@ fn collect_benchmark_inputs() -> Vec<BenchmarkInput> {
     ret
 }
 
+fn skip_validation(test: &Path) -> bool {
+    let broken = [
+        "gc/gc-rec-sub.wat",
+        "proposals/gc/type-equivalence.wast",
+        "proposals/gc/type-subtyping.wast",
+    ];
+
+    let test_path = test.to_str().unwrap().replace("\\", "/"); // for windows paths
+    if broken.iter().any(|x| test_path.contains(x)) {
+        return true;
+    }
+
+    false
+}
+
 fn define_benchmarks(c: &mut Criterion) {
+    let _ = env_logger::try_init();
+
     fn validator() -> Validator {
         Validator::new_with_features(WasmFeatures {
             reference_types: true,
@@ -256,6 +270,8 @@ fn define_benchmarks(c: &mut Criterion) {
             sign_extension: true,
             function_references: true,
             memory_control: true,
+            gc: true,
+            component_model_values: true,
         })
     }
 
@@ -282,6 +298,10 @@ fn define_benchmarks(c: &mut Criterion) {
     let validate_inputs = once_cell::unsync::Lazy::new(|| {
         let mut list = Vec::new();
         for input in test_inputs.iter() {
+            if skip_validation(&input.path) {
+                continue;
+            }
+            log::debug!("Validating {}", input.path.display());
             if validator().validate_all(&input.wasm).is_ok() {
                 list.push(&input.wasm);
             }

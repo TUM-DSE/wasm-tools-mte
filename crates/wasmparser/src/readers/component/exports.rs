@@ -48,15 +48,26 @@ impl ComponentExternalKind {
             }
         })
     }
+
+    /// Returns a simple string description of this kind.
+    pub fn desc(&self) -> &'static str {
+        use ComponentExternalKind::*;
+        match self {
+            Module => "module",
+            Func => "func",
+            Value => "value",
+            Type => "type",
+            Instance => "instance",
+            Component => "component",
+        }
+    }
 }
 
 /// Represents an export in a WebAssembly component.
 #[derive(Debug, Clone)]
 pub struct ComponentExport<'a> {
     /// The name of the exported item.
-    pub name: &'a str,
-    /// The optional URL of the exported item.
-    pub url: &'a str,
+    pub name: ComponentExportName<'a>,
     /// The kind of the export.
     pub kind: ComponentExternalKind,
     /// The index of the exported item.
@@ -72,7 +83,6 @@ impl<'a> FromReader<'a> for ComponentExport<'a> {
     fn from_reader(reader: &mut BinaryReader<'a>) -> Result<Self> {
         Ok(ComponentExport {
             name: reader.read()?,
-            url: reader.read()?,
             kind: reader.read()?,
             index: reader.read()?,
             ty: match reader.read_u8()? {
@@ -101,5 +111,25 @@ impl<'a> FromReader<'a> for ComponentExternalKind {
         };
 
         ComponentExternalKind::from_bytes(byte1, byte2, offset)
+    }
+}
+
+/// Represents the name of a component export.
+#[derive(Debug, Copy, Clone)]
+#[allow(missing_docs)]
+pub struct ComponentExportName<'a>(pub &'a str);
+
+impl<'a> FromReader<'a> for ComponentExportName<'a> {
+    fn from_reader(reader: &mut BinaryReader<'a>) -> Result<Self> {
+        match reader.read_u8()? {
+            0x00 => {}
+            // Historically export names used a discriminator byte of 0x01 to
+            // indicate an "interface" of the form `a:b/c` but nowadays that's
+            // inferred from string syntax. Ignore 0-vs-1 to continue to parse
+            // older binaries. Eventually this will go away.
+            0x01 => {}
+            x => return reader.invalid_leading_byte(x, "export name"),
+        }
+        Ok(ComponentExportName(reader.read_string()?))
     }
 }

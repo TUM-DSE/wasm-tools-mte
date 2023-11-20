@@ -11,6 +11,10 @@
     (import "foo" "log" (func (;0;) (type 0)))
     (memory (;0;) 1)
     (export "memory" (memory 0))
+    (@producers
+      (processed-by "wit-component" "$CARGO_PKG_VERSION")
+      (processed-by "my-fake-bindgen" "123.45")
+    )
   )
   (core module (;1;)
     (type (;0;) (func (param i32 i32)))
@@ -23,12 +27,18 @@
     (table (;0;) 1 1 funcref)
     (export "0" (func $indirect-foo-log))
     (export "$imports" (table 0))
+    (@producers
+      (processed-by "wit-component" "$CARGO_PKG_VERSION")
+    )
   )
   (core module (;2;)
     (type (;0;) (func (param i32 i32)))
     (import "" "0" (func (;0;) (type 0)))
     (import "" "$imports" (table (;0;) 1 1 funcref))
     (elem (;0;) (i32.const 0) func 0)
+    (@producers
+      (processed-by "wit-component" "$CARGO_PKG_VERSION")
+    )
   )
   (core instance (;0;) (instantiate 1))
   (alias core export 0 "0" (core func (;0;)))
@@ -50,5 +60,8 @@
   (core instance (;4;) (instantiate 2
       (with "" (instance 3))
     )
+  )
+  (@producers
+    (processed-by "wit-component" "$CARGO_PKG_VERSION")
   )
 )

@@ -1,21 +1,23 @@
-world foo {
-  type a = u32
-  type b = a
+package foo:foo;
 
-  export c: func(a: a) -> b
+world foo {
+  type a = u32;
+  type b = a;
+
+  export c: func(a: a) -> b;
 }
 
 
 interface disambiguate {
-  type t = u32
+  type t = u32;
 }
 
 world bar {
-  import disambiguate2: self.disambiguate
+  import disambiguate;
 
-  use self.disambiguate.{t}
+  use disambiguate.{t};
 
-  export foo: func() -> t
+  export foo: func() -> t;
 }
 
 world the-test {
@@ -27,6 +29,6 @@ world the-test {
     c(a),
   }
 
-  import foo: func(a: a) -> b
-  export bar: func(a: a) -> b
+  import foo: func(a: a) -> b;
+  export bar: func(a: a) -> b;
 }

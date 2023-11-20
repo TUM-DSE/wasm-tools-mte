@@ -2,7 +2,7 @@
 
 use anyhow::{Context, Result};
 use indexmap::IndexMap;
-use serde::Deserialize;
+use serde_derive::Deserialize;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -76,6 +76,10 @@ pub struct Config {
     /// All paths are relative to this directory.
     #[serde(skip)]
     pub dir: PathBuf,
+
+    /// Components whose exports define import dependencies to fulfill from.
+    #[serde(default)]
+    pub definitions: Vec<PathBuf>,
 
     /// The paths to search when automatically resolving dependencies.
     ///

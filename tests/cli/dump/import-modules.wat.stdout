@@ -1,20 +1,20 @@
-  0x0 | 00 61 73 6d | version 12 (Component)
-      | 0c 00 01 00
+  0x0 | 00 61 73 6d | version 13 (Component)
+      | 0d 00 01 00
   0x8 | 03 0d       | core type section
   0xa | 01          | 1 count
-  0xb | 50 02 01 60 | [core type 0] Module([Type(Func(FuncType { params: [], returns: [] })), Import(Import { module: "", name: "f", ty: Func(0) })])
+  0xb | 50 02 01 60 | [core type 0] Module([Type(SubType { is_final: true, supertype_idx: None, composite_type: Func(FuncType { params: [], results: [] }) }), Import(Import { module: "", name: "f", ty: Func(0) })])
       | 00 00 00 00
       | 01 66 00 00
  0x17 | 0a 07       | component import section
  0x19 | 01          | 1 count
- 0x1a | 01 61 00 00 | [module 0] ComponentImport { name: "a", url: "", ty: Module(0) }
+ 0x1a | 00 01 61 00 | [module 0] ComponentImport { name: ComponentImportName("a"), ty: Module(0) }
       | 11 00      
  0x20 | 01 2b       | [core module 1] inline size
    0x22 | 00 61 73 6d | version 1 (Module)
         | 01 00 00 00
    0x2a | 01 04       | type section
    0x2c | 01          | 1 count
-   0x2d | 60 00 00    | [type 0] Func(FuncType { params: [], returns: [] })
+   0x2d | 60 00 00    | [type 0] RecGroup { inner: Implicit(SubType { is_final: true, supertype_idx: None, composite_type: Func(FuncType { params: [], results: [] }) }) }
    0x30 | 03 02       | func section
    0x32 | 01          | 1 count
    0x33 | 00          | [func 0] type 0
@@ -42,11 +42,11 @@
       | 70 6f 6e 65
       | 6e 74 2d 6e
       | 61 6d 65   
- 0x6b | 01 0b 00 11 | core module section
+ 0x6b | 01 0b 00 11 | core module name section
  0x6f | 02          | 2 count
  0x70 | 00 02 6d 31 | Naming { index: 0, name: "m1" }
  0x74 | 01 02 6d 32 | Naming { index: 1, name: "m2" }
- 0x78 | 01 0b 00 12 | core instance section
+ 0x78 | 01 0b 00 12 | core instance name section
  0x7c | 02          | 2 count
  0x7d | 00 02 69 31 | Naming { index: 0, name: "i1" }
  0x81 | 01 02 69 32 | Naming { index: 1, name: "i2" }

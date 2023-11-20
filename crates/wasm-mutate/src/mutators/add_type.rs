@@ -55,24 +55,21 @@ impl Mutator for AddTypeMutator {
         if let Some(old_types) = config.info().get_type_section() {
             // Copy the existing types section over into the encoder.
             let reader = wasmparser::TypeSectionReader::new(old_types.data, 0)?;
-            for ty in reader {
-                match ty? {
-                    wasmparser::Type::Func(ty) => {
-                        let params = ty
-                            .params()
-                            .iter()
-                            .copied()
-                            .map(map_type)
-                            .collect::<Result<Vec<_>, _>>()?;
-                        let results = ty
-                            .results()
-                            .iter()
-                            .copied()
-                            .map(map_type)
-                            .collect::<Result<Vec<_>, _>>()?;
-                        types.function(params, results);
-                    }
-                }
+            for ty in reader.into_iter_err_on_gc_types() {
+                let ty = ty?;
+                let params = ty
+                    .params()
+                    .iter()
+                    .copied()
+                    .map(map_type)
+                    .collect::<Result<Vec<_>, _>>()?;
+                let results = ty
+                    .results()
+                    .iter()
+                    .copied()
+                    .map(map_type)
+                    .collect::<Result<Vec<_>, _>>()?;
+                types.function(params, results);
             }
             // And then add our new type.
             types.function(params, results);

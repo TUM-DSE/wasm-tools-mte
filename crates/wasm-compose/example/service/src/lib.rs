@@ -1,4 +1,6 @@
-use bindings::handler::{Error, Handler, Request, Response};
+cargo_component_bindings::generate!();
+
+use bindings::exports::example::service::handler::{Error, Handler, Request, Response};
 use std::str;
 
 struct Component;
@@ -27,5 +29,3 @@ impl Handler for Component {
         })
     }
 }
-
-bindings::export!(Component);

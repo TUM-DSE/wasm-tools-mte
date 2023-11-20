@@ -21,7 +21,7 @@
 //!
 //!     cargo test --test roundtrip local/ref.wat
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use rayon::prelude::*;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -39,7 +39,7 @@ fn main() {
     let filter = std::env::args().nth(1);
     let bless = std::env::var_os("BLESS").is_some();
     if bless {
-        std::fs::remove_dir_all("tests/snapshots").expect("clear the snapshots directory");
+        drop(std::fs::remove_dir_all("tests/snapshots"));
     }
 
     let tests = tests
@@ -66,7 +66,14 @@ fn main() {
     let state = TestState::default();
     let errors = tests
         .par_iter()
-        .filter_map(|(test, contents)| state.run_test(test, contents).err())
+        .filter_map(|(test, contents)| {
+            let start = std::time::Instant::now();
+            let result = state.run_test(test, contents).err();
+            if start.elapsed().as_secs() > 2 {
+                println!("{test:?} SLOW");
+            }
+            result
+        })
         .collect::<Vec<_>>();
 
     if !errors.is_empty() {
@@ -138,12 +145,8 @@ fn skip_test(test: &Path, contents: &[u8]) -> bool {
         // This is an empty file which currently doesn't parse
         "multi-memory/memory_copy1.wast",
     ];
-    if broken.iter().any(|x| test.ends_with(x)) {
-        return true;
-    }
-
-    // TODO: the gc proposal isn't implemented yet
-    if test.iter().any(|p| p == "gc") {
+    let test_path = test.to_str().unwrap().replace("\\", "/"); // for windows paths
+    if broken.iter().any(|x| test_path.contains(x)) {
         return true;
     }
 
@@ -162,6 +165,43 @@ fn skip_test(test: &Path, contents: &[u8]) -> bool {
     false
 }
 
+fn skip_validation(test: &Path) -> bool {
+    let broken = &[
+        "gc/gc-array.wat",
+        "gc/gc-rec-sub.wat",
+        "gc/gc-struct.wat",
+        "/proposals/gc/array.wast",
+        "/proposals/gc/array_copy.wast",
+        "/proposals/gc/array_fill.wast",
+        "/proposals/gc/array_init_data.wast",
+        "/proposals/gc/array_init_elem.wast",
+        "/proposals/gc/binary-gc.wast",
+        "/proposals/gc/br_on_cast.wast",
+        "/proposals/gc/br_on_cast_fail.wast",
+        "/proposals/gc/data.wast",
+        "/proposals/gc/elem.wast",
+        "/proposals/gc/extern.wast",
+        "/proposals/gc/global.wast",
+        "/proposals/gc/i31.wast",
+        "/proposals/gc/ref_cast.wast",
+        "/proposals/gc/ref_eq.wast",
+        "/proposals/gc/ref_test.wast",
+        "/proposals/gc/struct.wast",
+        "/proposals/gc/type-equivalence.wast",
+        "/proposals/gc/type-rec.wast",
+        "/proposals/gc/type-subtyping.wast",
+        "/exnref/exnref.wast",
+        "/exnref/throw_ref.wast",
+        "/exnref/try_table.wast",
+    ];
+    let test_path = test.to_str().unwrap().replace("\\", "/"); // for windows paths
+    if broken.iter().any(|x| test_path.contains(x)) {
+        return true;
+    }
+
+    false
+}
+
 #[derive(Default)]
 struct TestState {
     ntests: AtomicUsize,
@@ -169,11 +209,15 @@ struct TestState {
 
 impl TestState {
     fn run_test(&self, test: &Path, contents: &[u8]) -> Result<()> {
-        let result = match test.extension().and_then(|s| s.to_str()) {
-            Some("wat") => self.test_wat(test),
-            Some("wast") => self.test_wast(test, contents),
-            _ => bail!("unknown file extension {:?}", test),
-        };
+        let result =
+            match std::panic::catch_unwind(|| match test.extension().and_then(|s| s.to_str()) {
+                Some("wat") => self.test_wat(test),
+                Some("wast") => self.test_wast(test, contents),
+                _ => bail!("unknown file extension {:?}", test),
+            }) {
+                Ok(result) => result,
+                Err(e) => Err(anyhow!("panicked: {e:?}")),
+            };
         result.with_context(|| format!("failed test: {}", test.display()))
     }
 
@@ -182,6 +226,11 @@ impl TestState {
         // wasm file.
         let binary = wat::parse_file(test)?;
         self.bump_ntests();
+
+        if skip_validation(test) {
+            return Ok(());
+        }
+
         self.test_wasm(test, &binary, true)
             .context("failed testing the binary output of `wat`")?;
         Ok(())
@@ -219,9 +268,13 @@ impl TestState {
         // Both of these cases indicate possible bugs in `wasmprinter` itself
         // which while they don't actually affect the meaning they do "affect"
         // humans reading the output.
-        for token in wast::lexer::Lexer::new(&string).allow_confusing_unicode(true) {
-            let ws = match token? {
-                wast::lexer::Token::Whitespace(ws) => ws,
+        for token in wast::lexer::Lexer::new(&string)
+            .allow_confusing_unicode(true)
+            .iter(0)
+        {
+            let token = token?;
+            let ws = match token.kind {
+                wast::lexer::TokenKind::Whitespace => token.src(&string),
                 _ => continue,
             };
             if ws.starts_with("\n") || ws == " " {
@@ -260,6 +313,7 @@ impl TestState {
             .enumerate()
             .filter_map(|(index, directive)| {
                 let span = directive.span();
+
                 self.test_wast_directive(test, directive, index)
                     .with_context(|| {
                         let (line, col) = span.linecol_in(contents);
@@ -289,30 +343,16 @@ impl TestState {
     }
 
     fn test_wast_directive(&self, test: &Path, directive: WastDirective, idx: usize) -> Result<()> {
-        // Only test parsing and encoding of modules which wasmparser doesn't
-        // support test (basically just test `wast`, nothing else)
-        let skip_verify = test.iter().any(|t| t == "gc")
-            // This specific test contains a module along the lines of:
-            //
-            //  (module
-            //   (type $t (func))
-            //   (func $tf)
-            //   (table $t (ref null $t) (elem $tf))
-            //  )
-            //
-            // which doesn't currently validate since the injected element
-            // segment has a type of `funcref` which isn't compatible with the
-            // table's type. The spec interpreter thinks this should validate,
-            // however, and I'm not entirely sure why.
-            || test.ends_with("function-references/br_table.wast");
-
         match directive {
             WastDirective::Wat(mut module) => {
                 let actual = module.encode()?;
                 self.bump_ntests(); // testing encode
-                if skip_verify {
+
+                if skip_validation(test) {
+                    // Verify that we can parse the wat, but otherwise do nothing.
                     return Ok(());
                 }
+
                 let test_roundtrip = match module {
                     // Don't test the wasmprinter round trip since these bytes
                     // may not be in their canonical form (didn't come from the
@@ -342,6 +382,10 @@ impl TestState {
                 message,
                 span: _,
             } => {
+                if skip_validation(test) {
+                    return Ok(());
+                }
+
                 let result = module.encode().map_err(|e| e.into()).and_then(|wasm| {
                     // TODO: when memory64 merges into the proper spec then this
                     // should be removed since it will presumably no longer be a
@@ -363,9 +407,6 @@ impl TestState {
 
                     self.test_wasm_valid(test, &wasm)
                 });
-                if skip_verify {
-                    return Ok(());
-                }
                 match result {
                     Ok(_) => bail!(
                         "encoded and validated successfully but should have failed with: {}",
@@ -381,6 +422,12 @@ impl TestState {
                 }
             }
 
+            WastDirective::Thread(thread) => {
+                for (i, directive) in thread.directives.into_iter().enumerate() {
+                    self.test_wast_directive(test, directive, idx * 1000 + i)?;
+                }
+            }
+
             // This test suite doesn't actually execute any wasm code, so ignore
             // all of these assertions.
             WastDirective::Register { .. }
@@ -389,7 +436,8 @@ impl TestState {
             | WastDirective::AssertReturn { .. }
             | WastDirective::AssertExhaustion { .. }
             | WastDirective::AssertUnlinkable { .. }
-            | WastDirective::AssertException { .. } => {}
+            | WastDirective::AssertException { .. }
+            | WastDirective::Wait { .. } => {}
         }
         Ok(())
     }
@@ -562,10 +610,21 @@ impl TestState {
             mutable_global: true,
             function_references: true,
             memory_control: true,
+            gc: true,
+            component_model_values: true,
         };
         for part in test.iter().filter_map(|t| t.to_str()) {
             match part {
-                "testsuite" => features = WasmFeatures::default(),
+                "testsuite" => {
+                    features = WasmFeatures::default();
+
+                    // NB: when these proposals are merged upstream in the spec
+                    // repo then this should be removed. Currently this hasn't
+                    // happened so this is required to get tests passing for
+                    // when these proposals are enabled by default.
+                    features.multi_memory = false;
+                    features.threads = false;
+                }
                 "missing-features" => {
                     features = WasmFeatures::default();
                     features.simd = false;
@@ -576,6 +635,8 @@ impl TestState {
                     features.mutable_global = false;
                     features.bulk_memory = false;
                     features.function_references = false;
+                    features.gc = false;
+                    features.component_model_values = false;
                 }
                 "floats-disabled.wast" => features.floats = false,
                 "threads" => {
@@ -596,6 +657,10 @@ impl TestState {
                 "function-references" => features.function_references = true,
                 "relaxed-simd" => features.relaxed_simd = true,
                 "reference-types" => features.reference_types = true,
+                "gc" => {
+                    features.function_references = true;
+                    features.gc = true;
+                }
                 _ => {}
             }
         }
@@ -744,11 +809,18 @@ fn error_matches(error: &str, message: &str) -> bool {
         return error.contains("invalid u32 number: constant out of range");
     }
 
-    // The test suite includes "bad opcodes" that later became valid opcodes
-    // (0xd3, function references proposal). However, they are still not constant
-    // expressions, so we can sidestep by checking for that error instead
     if message == "illegal opcode" {
-        return error.contains("constant expression required");
+        // The test suite includes "bad opcodes" that later became valid opcodes
+        // (0xd4, function references proposal). However, they are still not
+        // constant expressions, so we can sidestep by checking for that error
+        // instead
+        return error.contains("constant expression required")
+            // The test suite contains a test with a global section where the
+            // init expression is truncated and doesn't have an "end"
+            // instruction. That's reported with wasmparser as end-of-file
+            // because the end of the section was reached while the spec
+            // interpreter says "illegal opcode".
+            || error.contains("unexpected end-of-file");
     }
     if message == "unknown global" {
         return error.contains("global.get of locally defined global");
@@ -756,6 +828,10 @@ fn error_matches(error: &str, message: &str) -> bool {
 
     if message == "immutable global" {
         return error.contains("global is immutable");
+    }
+
+    if message == "sub type" {
+        return error.contains("subtype");
     }
 
     return false;

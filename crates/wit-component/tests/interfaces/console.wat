@@ -7,8 +7,11 @@
           (export (;0;) "log" (func (type 0)))
         )
       )
-      (export (;0;) "console" "pkg:/console/console" (instance (type 0)))
+      (export (;0;) "foo:console/console" (instance (type 0)))
     )
   )
-  (export (;1;) "console" "pkg:/console" (type 0))
+  (export (;1;) "console" (type 0))
+  (@producers
+    (processed-by "wit-component" "$CARGO_PKG_VERSION")
+  )
 )

@@ -29,11 +29,15 @@ impl SizeAlign {
             TypeDefKind::Enum(e) => self.variant(e.tag(), []),
             TypeDefKind::Option(t) => self.variant(Int::U8, [Some(t)]),
             TypeDefKind::Result(r) => self.variant(Int::U8, [r.ok.as_ref(), r.err.as_ref()]),
-            TypeDefKind::Union(u) => self.variant(u.tag(), u.cases.iter().map(|c| Some(&c.ty))),
+            // A resource is represented as an index.
+            TypeDefKind::Handle(_) => (4, 4),
             // A future is represented as an index.
             TypeDefKind::Future(_) => (4, 4),
             // A stream is represented as an index.
             TypeDefKind::Stream(_) => (4, 4),
+            // This shouldn't be used for anything since raw resources aren't part of the ABI -- just handles to
+            // them.
+            TypeDefKind::Resource => (usize::MAX, usize::MAX),
             TypeDefKind::Unknown => unreachable!(),
         }
     }
