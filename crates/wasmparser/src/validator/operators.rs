@@ -3414,17 +3414,17 @@ where
         Ok(())
     }
 
-    fn visit_i64_pointer_sign(&mut self) -> Self::Output {
-        self.pop_operand(Some(ValType::I64))?; // parameter: unsigned pointer
-        self.push_operand(ValType::I64)?; // return: signed pointer
-        Ok(())
-    }
+    // fn visit_i64_pointer_sign(&mut self) -> Self::Output {
+    //     self.pop_operand(Some(ValType::I64))?; // parameter: unsigned pointer
+    //     self.push_operand(ValType::I64)?; // return: signed pointer
+    //     Ok(())
+    // }
 
-    fn visit_i64_pointer_auth(&mut self) -> Self::Output {
-        self.pop_operand(Some(ValType::I64))?; // parameter: pointer to be authenticated
-        self.push_operand(ValType::I64)?; // return: authenticated pointer
-        Ok(())
-    }
+    // fn visit_i64_pointer_auth(&mut self) -> Self::Output {
+    //     self.pop_operand(Some(ValType::I64))?; // parameter: pointer to be authenticated
+    //     self.push_operand(ValType::I64)?; // return: authenticated pointer
+    //     Ok(())
+    // }
 }
 
 #[derive(Clone)]
