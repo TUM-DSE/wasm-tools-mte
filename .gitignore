@@ -5,4 +5,5 @@ publish
 *.wasm
 *.wat
 test.config
+.idea
 
