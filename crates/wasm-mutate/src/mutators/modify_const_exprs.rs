@@ -126,6 +126,7 @@ impl<'cfg, 'wasm> Translator for InitTranslator<'cfg, 'wasm> {
                 }),
                 T::FUNCREF => CE::ref_null(wasm_encoder::HeapType::Func),
                 T::EXTERNREF => CE::ref_null(wasm_encoder::HeapType::Extern),
+                T::Ptr => CE::ptr_null(),
                 T::Ref(_) => unimplemented!(),
             }
         } else {

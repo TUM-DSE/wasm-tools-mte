@@ -187,6 +187,7 @@ pub fn ty(t: &mut dyn Translator, ty: &wasmparser::ValType) -> Result<ValType> {
         wasmparser::ValType::F32 => Ok(ValType::F32),
         wasmparser::ValType::F64 => Ok(ValType::F64),
         wasmparser::ValType::V128 => Ok(ValType::V128),
+        wasmparser::ValType::Ptr => Ok(ValType::Ptr),
         wasmparser::ValType::Ref(ty) => Ok(ValType::Ref(t.translate_refty(ty)?)),
     }
 }

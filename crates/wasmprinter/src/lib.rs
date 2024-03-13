@@ -923,6 +923,7 @@ impl Printer {
             ValType::F32 => self.result.push_str("f32"),
             ValType::F64 => self.result.push_str("f64"),
             ValType::V128 => self.result.push_str("v128"),
+            ValType::Ptr => self.result.push_str("ptr"),
             ValType::Ref(rt) => self.print_reftype(rt)?,
         }
         Ok(())

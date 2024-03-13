@@ -711,6 +711,7 @@ impl Module {
             ValType::F32 => Ok(ValType::F32),
             ValType::F64 => Ok(ValType::F64),
             ValType::V128 => Ok(ValType::V128),
+            ValType::Ptr => Ok(ValType::Ptr),
             ValType::Ref(ty) => Ok(ValType::Ref(self.arbitrary_matching_ref_type(u, ty)?)),
         }
     }
@@ -814,6 +815,7 @@ impl Module {
             ValType::F32 => Ok(ValType::F32),
             ValType::F64 => Ok(ValType::F64),
             ValType::V128 => Ok(ValType::V128),
+            ValType::Ptr => Ok(ValType::Ptr),
             ValType::Ref(ty) => Ok(ValType::Ref(self.arbitrary_super_type_of_ref_type(u, ty)?)),
         }
     }
@@ -1560,8 +1562,9 @@ impl Module {
                 choices.push(Box::new(|u, _| Ok(ConstExpr::v128_const(u.arbitrary()?))))
             }
 
-            ValType::Ref(ty) => {
-                if ty.nullable {
+            ValType::Ptr => todo!("create ptr value"),
+                        ValType::Ref(ty) => {
+                            if ty.nullable {
                     choices.push(Box::new(move |_, _| Ok(ConstExpr::ref_null(ty.heap_type))));
                 }
 
@@ -1655,6 +1658,7 @@ impl Module {
                 wasmparser::ValType::F32 => ValType::F32,
                 wasmparser::ValType::F64 => ValType::F64,
                 wasmparser::ValType::V128 => ValType::V128,
+                wasmparser::ValType::Ptr => ValType::Ptr,
                 wasmparser::ValType::Ref(r) => ValType::Ref(RefType {
                     nullable: r.is_nullable(),
                     heap_type: convert_heap_type(&r.heap_type()),

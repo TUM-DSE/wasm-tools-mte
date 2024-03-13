@@ -519,7 +519,7 @@ impl<'a> Resolver<'a> {
             }
             TypeDef::Resource(r) => {
                 match &mut r.rep {
-                    ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64 | ValType::V128 => {}
+                    ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64 | ValType::V128 | ValType::Ptr => {}
                     ValType::Ref(r) => match &mut r.heap {
                         core::HeapType::Func
                         | core::HeapType::Extern

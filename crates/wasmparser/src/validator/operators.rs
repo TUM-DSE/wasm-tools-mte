@@ -581,7 +581,7 @@ where
                 // A "heap bottom" type cannot match any numeric types.
                 (
                     MaybeType::HeapBot,
-                    ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64 | ValType::V128,
+                    ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64 | ValType::V128 | ValType::Ptr,
                 ) => {
                     bail!(
                         self.offset,
@@ -717,6 +717,16 @@ where
     /// Validates that `memory_index` is valid in this module, and returns the
     /// type of address used to index the memory specified.
     fn check_memory_index(&self, memory_index: u32) -> Result<ValType> {
+        if self.features.memory_safety {
+            Ok(ValType::Ptr)
+        } else {
+            self.check_memory_index_size_ty(memory_index)
+        }
+    }
+
+    /// Validates that `memory_index` is valid in this module, and returns the
+    /// type of address used to index the memory specified.
+    fn check_memory_index_size_ty(&self, memory_index: u32) -> Result<ValType> {
         match self.resources.memory_at(memory_index) {
             Some(mem) => Ok(mem.index_type()),
             None => bail!(self.offset, "unknown memory {}", memory_index),
@@ -1170,6 +1180,7 @@ pub fn ty_to_str(ty: ValType) -> &'static str {
         ValType::F32 => "f32",
         ValType::F64 => "f64",
         ValType::V128 => "v128",
+        ValType::Ptr => "ptr",
         ValType::Ref(r) => r.wat(),
     }
 }
@@ -1222,6 +1233,7 @@ macro_rules! validate_proposal {
     (desc function_references) => ("function references");
     (desc memory_control) => ("memory control");
     (desc gc) => ("gc");
+    (desc memory_safety) => ("memory_safety");
 }
 
 impl<'a, T> VisitOperator<'a> for WasmProposalValidator<'_, '_, T>
@@ -1755,7 +1767,7 @@ where
         if mem_byte != 0 && !self.features.multi_memory {
             bail!(self.offset, "multi-memory not enabled: zero byte expected");
         }
-        let index_ty = self.check_memory_index(mem)?;
+        let index_ty = self.check_memory_index_size_ty(mem)?;
         self.push_operand(index_ty)?;
         Ok(())
     }
@@ -1763,7 +1775,7 @@ where
         if mem_byte != 0 && !self.features.multi_memory {
             bail!(self.offset, "multi-memory not enabled: zero byte expected");
         }
-        let index_ty = self.check_memory_index(mem)?;
+        let index_ty = self.check_memory_index_size_ty(mem)?;
         self.pop_operand(Some(index_ty))?;
         self.push_operand(index_ty)?;
         Ok(())
@@ -3639,7 +3651,7 @@ where
         let array_ty = self.array_type_at(type_index)?;
         let elem_ty = array_ty.0.element_type.unpack();
         match elem_ty {
-            ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64 | ValType::V128 => {}
+            ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64 | ValType::V128 | ValType::Ptr => {}
             ValType::Ref(_) => bail!(
                 self.offset,
                 "type mismatch: array.new_data can only create arrays with numeric and vector elements"
@@ -3658,7 +3670,7 @@ where
         let array_ty = self.array_type_at(type_index)?;
         let array_ref_ty = match array_ty.0.element_type.unpack() {
             ValType::Ref(rt) => rt,
-            ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64 | ValType::V128 => bail!(
+            ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64 | ValType::V128 | ValType::Ptr => bail!(
                 self.offset,
                 "type mismatch: array.new_elem can only create arrays with reference elements"
             ),
@@ -3795,7 +3807,7 @@ where
         }
         let val_ty = array_ty.0.element_type.unpack();
         match val_ty {
-            ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64 | ValType::V128 => {}
+            ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64 | ValType::V128 | ValType::Ptr => {}
             ValType::Ref(_) => bail!(
                 self.offset,
                 "invalid array.init_data: array type is not numeric or vector"
@@ -3819,7 +3831,7 @@ where
         }
         let array_ref_ty = match array_ty.0.element_type.unpack() {
             ValType::Ref(rt) => rt,
-            ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64 | ValType::V128 => bail!(
+            ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64 | ValType::V128 | ValType::Ptr => bail!(
                 self.offset,
                 "type mismatch: array.init_elem can only create arrays with reference elements"
             ),
@@ -3967,6 +3979,21 @@ where
     fn visit_i31_get_u(&mut self) -> Self::Output {
         self.pop_operand(Some(ValType::Ref(RefType::I31REF)))?;
         self.push_operand(ValType::I32)
+    }
+    fn visit_segment_new(&mut self, mem: MemArg) -> Self::Output {
+        let ty = self.check_memarg(mem)?;
+        let size_ty = self.check_memory_index_size_ty(mem.memory)?;
+        self.pop_operand(Some(size_ty))?;
+        self.pop_operand(Some(ty))?;
+        self.push_operand(ValType::Ptr)
+    }
+    fn visit_ptr_add(&mut self) -> Self::Output {
+        // We assume no multi memory for now
+        assert!(!self.features.multi_memory);
+        let offset_ty = self.check_memory_index_size_ty(0)?;
+        self.pop_operand(Some(offset_ty))?;
+        self.pop_operand(Some(ValType::Ptr))?;
+        self.push_operand(ValType::Ptr)
     }
 }
 

@@ -738,6 +738,10 @@ macro_rules! for_each_operator {
             @function_references RefAsNonNull => visit_ref_as_non_null
             @function_references BrOnNull { relative_depth: u32 } => visit_br_on_null
             @function_references BrOnNonNull { relative_depth: u32 } => visit_br_on_non_null
+
+            // Memory Safety
+            @memory_safety SegmentNew { memarg: $crate::MemArg } => visit_segment_new
+            @memory_safety PtrAdd => visit_ptr_add
         }
     };
 }

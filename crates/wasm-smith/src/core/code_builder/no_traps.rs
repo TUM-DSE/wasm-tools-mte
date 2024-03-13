@@ -399,6 +399,7 @@ fn dummy_value_inst<'a>(ty: ValType) -> Instruction<'a> {
         ValType::F32 => Instruction::F32Const(0.0),
         ValType::F64 => Instruction::F64Const(0.0),
         ValType::V128 => Instruction::V128Const(0),
+        ValType::Ptr => todo!("create null ptr"),
         ValType::Ref(ty) => {
             assert!(ty.nullable);
             Instruction::RefNull(ty.heap_type)
@@ -639,6 +640,7 @@ fn size_of_type_in_memory(ty: ValType) -> u64 {
         ValType::F32 => 4,
         ValType::F64 => 8,
         ValType::V128 => 16,
+        ValType::Ptr => 16,
         ValType::Ref(_) => panic!("not a memory type"),
     }
 }

@@ -980,6 +980,10 @@ pub enum Instruction<'a> {
     I64AtomicRmw8CmpxchgU(MemArg),
     I64AtomicRmw16CmpxchgU(MemArg),
     I64AtomicRmw32CmpxchgU(MemArg),
+
+    // Memory Safety instructions
+    SegmentNew(MemArg),
+    PtrAdd,
 }
 
 impl Encode for Instruction<'_> {
@@ -3123,6 +3127,15 @@ impl Encode for Instruction<'_> {
                 sink.push(0x4E);
                 memarg.encode(sink);
             }
+            Instruction::SegmentNew(memarg) => {
+                sink.push(0xFA);
+                sink.push(0xA0);
+                memarg.encode(sink);
+            }
+            Instruction::PtrAdd => {
+                sink.push(0xFA);
+                sink.push(0xA1);
+            }
         }
     }
 }
@@ -3201,6 +3214,11 @@ impl ConstExpr {
     /// Create a constant expression containing a single `ref.null` instruction.
     pub fn ref_null(ty: HeapType) -> Self {
         Self::new_insn(Instruction::RefNull(ty))
+    }
+
+    /// Create a constant expression containing a single `ref.null` instruction.
+    pub fn ptr_null() -> Self {
+        todo!("create instructions")
     }
 
     /// Create a constant expression containing a single `ref.func` instruction.

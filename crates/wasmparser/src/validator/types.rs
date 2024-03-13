@@ -2727,7 +2727,8 @@ impl TypeList {
             | (ValType::I64, _)
             | (ValType::F32, _)
             | (ValType::F64, _)
-            | (ValType::V128, _) => false,
+            | (ValType::V128, _)
+            | (ValType::Ptr, _) => false,
         }
     }
 

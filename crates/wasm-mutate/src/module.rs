@@ -8,6 +8,7 @@ pub enum PrimitiveTypeInfo {
     F32,
     F64,
     V128,
+    Ptr,
     FuncRef,
     ExternRef,
     Empty,
@@ -33,6 +34,7 @@ impl From<wasmparser::ValType> for PrimitiveTypeInfo {
             wasmparser::ValType::F32 => PrimitiveTypeInfo::F32,
             wasmparser::ValType::F64 => PrimitiveTypeInfo::F64,
             wasmparser::ValType::V128 => PrimitiveTypeInfo::V128,
+            wasmparser::ValType::Ptr => PrimitiveTypeInfo::Ptr,
             wasmparser::ValType::Ref(t) => t.into(),
         }
     }
@@ -72,6 +74,7 @@ pub fn map_type(tpe: wasmparser::ValType) -> Result<ValType> {
         wasmparser::ValType::F32 => Ok(ValType::F32),
         wasmparser::ValType::F64 => Ok(ValType::F64),
         wasmparser::ValType::V128 => Ok(ValType::V128),
+        wasmparser::ValType::Ptr => Ok(ValType::Ptr),
         wasmparser::ValType::Ref(t) => Ok(ValType::Ref(map_ref_type(t)?)),
     }
 }

@@ -83,7 +83,7 @@ pub trait WasmModuleResources {
             .map_err(|s| BinaryReaderError::new(s, offset))?;
         match t {
             ValType::Ref(r) => self.check_ref_type(r, offset),
-            ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64 | ValType::V128 => Ok(()),
+            ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64 | ValType::V128 | ValType::Ptr => Ok(()),
         }
     }
 

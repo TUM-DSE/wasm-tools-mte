@@ -476,7 +476,7 @@ impl<'a> Module<'a> {
     fn valty(&mut self, ty: ValType) {
         match ty {
             ValType::Ref(r) => self.refty(r),
-            ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64 | ValType::V128 => {}
+            ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64 | ValType::V128 | ValType::Ptr => {}
         }
     }
 
@@ -1109,6 +1109,7 @@ impl Encoder {
             wasmparser::ValType::F32 => wasm_encoder::ValType::F32,
             wasmparser::ValType::F64 => wasm_encoder::ValType::F64,
             wasmparser::ValType::V128 => wasm_encoder::ValType::V128,
+            wasmparser::ValType::Ptr => wasm_encoder::ValType::Ptr,
             wasmparser::ValType::Ref(rt) => wasm_encoder::ValType::Ref(self.refty(rt)),
         }
     }

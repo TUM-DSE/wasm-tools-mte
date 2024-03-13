@@ -1101,6 +1101,8 @@ macro_rules! define_visit {
     (name Catch) => ("catch");
     (name CatchAll) => ("catch_all");
     (name Delegate) => ("delegate");
+    (name SegmentNew) => ("segment.new");
+    (name PtrAdd) => ("ptr.add");
 }
 
 impl<'a> VisitOperator<'a> for PrintOperator<'_, '_> {

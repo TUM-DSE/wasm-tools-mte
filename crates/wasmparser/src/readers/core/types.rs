@@ -723,6 +723,8 @@ pub enum ValType {
     V128,
     /// The value type is a reference.
     Ref(RefType),
+    /// The value type is an opaque pointer type
+    Ptr,
 }
 
 impl From<RefType> for ValType {
@@ -740,6 +742,7 @@ impl std::fmt::Display for ValType {
             ValType::F32 => f.write_str("f32"),
             ValType::F64 => f.write_str("f64"),
             ValType::V128 => f.write_str("v128"),
+            ValType::Ptr => f.write_str("ptr"),
             ValType::Ref(r) => std::fmt::Display::fmt(r, f),
         }
     }
@@ -767,7 +770,7 @@ impl ValType {
     pub fn as_reference_type(&self) -> Option<RefType> {
         match *self {
             ValType::Ref(r) => Some(r),
-            ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64 | ValType::V128 => None,
+            ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64 | ValType::V128 | ValType::Ptr => None,
         }
     }
 
@@ -775,7 +778,7 @@ impl ValType {
     /// type.
     pub fn is_defaultable(&self) -> bool {
         match *self {
-            Self::I32 | Self::I64 | Self::F32 | Self::F64 | Self::V128 => true,
+            Self::I32 | Self::I64 | Self::F32 | Self::F64 | Self::V128 | Self::Ptr => true,
             Self::Ref(rt) => rt.is_nullable(),
         }
     }
@@ -792,7 +795,7 @@ impl ValType {
                     *r = RefType::concrete(r.is_nullable(), idx);
                 }
             }
-            ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64 | ValType::V128 => {}
+            ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64 | ValType::V128  | ValType::Ptr => {}
         }
         Ok(())
     }
@@ -1347,6 +1350,10 @@ impl<'a> FromReader<'a> for ValType {
             0x7B => {
                 reader.position += 1;
                 Ok(ValType::V128)
+            }
+            0x75 => {
+                reader.position += 1;
+                Ok(ValType::Ptr)
             }
             0x70 | 0x6F | 0x64 | 0x63 | 0x6E | 0x71 | 0x72 | 0x73 | 0x6D | 0x6B | 0x6A | 0x6C
             | 0x69 => Ok(ValType::Ref(reader.read()?)),

@@ -208,6 +208,9 @@ pub enum ValType {
     ///
     /// Part of the SIMD proposal.
     V128,
+    /// The `ptr` type.
+    /// Opaque pointer, part of the memory safety.
+    Ptr,
     /// A reference type.
     ///
     /// The `funcref` and `externref` type fall into this category and the full
@@ -226,6 +229,7 @@ impl TryFrom<wasmparser::ValType> for ValType {
             wasmparser::ValType::F32 => ValType::F32,
             wasmparser::ValType::F64 => ValType::F64,
             wasmparser::ValType::V128 => ValType::V128,
+            wasmparser::ValType::Ptr => ValType::Ptr,
             wasmparser::ValType::Ref(r) => ValType::Ref(r.try_into()?),
         })
     }
@@ -236,7 +240,7 @@ impl ValType {
     pub fn is_numeric(&self) -> bool {
         match self {
             ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64 => true,
-            ValType::V128 | ValType::Ref(_) => false,
+            ValType::V128 | ValType::Ptr | ValType::Ref(_) => false,
         }
     }
 
@@ -244,7 +248,7 @@ impl ValType {
     pub fn is_vector(&self) -> bool {
         match self {
             ValType::V128 => true,
-            ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64 | ValType::Ref(_) => false,
+            ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64 | ValType::Ref(_) | ValType::Ptr => false,
         }
     }
 
@@ -252,7 +256,7 @@ impl ValType {
     pub fn is_reference(&self) -> bool {
         match self {
             ValType::Ref(_) => true,
-            ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64 | ValType::V128 => false,
+            ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64 | ValType::V128 | ValType::Ptr => false,
         }
     }
 }
@@ -303,7 +307,7 @@ impl ValType {
     pub fn is_defaultable(&self) -> bool {
         match self {
             ValType::Ref(r) => r.nullable,
-            ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64 | ValType::V128 => true,
+            ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64 | ValType::V128 | ValType::Ptr => true,
         }
     }
 }
@@ -326,6 +330,7 @@ impl Encode for ValType {
             ValType::F32 => sink.push(0x7D),
             ValType::F64 => sink.push(0x7C),
             ValType::V128 => sink.push(0x7B),
+            ValType::Ptr => sink.push(0x75),
             ValType::Ref(rt) => rt.encode(sink),
         }
     }

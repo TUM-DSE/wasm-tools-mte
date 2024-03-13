@@ -483,6 +483,7 @@ pub mod kw {
     custom_keyword!(then);
     custom_keyword!(r#try = "try");
     custom_keyword!(v128);
+    custom_keyword!(ptr);
     custom_keyword!(value);
     custom_keyword!(s8);
     custom_keyword!(s16);

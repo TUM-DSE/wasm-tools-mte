@@ -251,6 +251,8 @@ pub struct WasmFeatures {
     pub component_model_values: bool,
     /// Support for the nested namespaces and projects in component model names.
     pub component_model_nested_names: bool,
+    /// Support for memory safety
+    pub memory_safety: bool,
 }
 
 impl WasmFeatures {
@@ -278,6 +280,7 @@ impl WasmFeatures {
             gc: true,
             component_model_values: true,
             component_model_nested_names: true,
+            memory_safety: true,
         }
     }
 
@@ -301,6 +304,13 @@ impl WasmFeatures {
                     Ok(())
                 } else {
                     Err("SIMD support is not enabled")
+                }
+            }
+            ValType::Ptr => {
+                if self.memory_safety {
+                    Ok(())
+                } else {
+                    Err("memory safety support is not enabled")
                 }
             }
         }
@@ -377,6 +387,7 @@ impl Default for WasmFeatures {
             gc: false,
             component_model_values: false,
             component_model_nested_names: false,
+            memory_safety: false,
 
             // On-by-default features (phase 4 or greater).
             mutable_global: true,

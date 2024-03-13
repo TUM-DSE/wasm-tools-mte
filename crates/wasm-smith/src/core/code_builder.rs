@@ -1529,6 +1529,7 @@ impl CodeBuilder<'_> {
             // Don't know how to combine reference types at this time, so just
             // let it get dropped.
             ValType::Ref(_) => return Ok(false),
+            ValType::Ptr => return Ok(false),
         };
         instructions.push(Instruction::GlobalGet(global));
         instructions.push(combine);
@@ -1551,6 +1552,7 @@ fn arbitrary_val(ty: ValType, u: &mut Unstructured<'_>) -> Instruction {
         ValType::F32 => Instruction::F32Const(u.arbitrary().unwrap_or(0.0)),
         ValType::F64 => Instruction::F64Const(u.arbitrary().unwrap_or(0.0)),
         ValType::V128 => Instruction::V128Const(u.arbitrary().unwrap_or(0)),
+        ValType::Ptr => unimplemented!("arbitrary_val for Ptr"),
         ValType::Ref(ty) => {
             assert!(ty.nullable);
             Instruction::RefNull(ty.heap_type)
@@ -2582,7 +2584,7 @@ fn select(
     match ty {
         Some(ty @ ValType::Ref(_)) => instructions.push(Instruction::TypedSelect(ty)),
         Some(ValType::I32) | Some(ValType::I64) | Some(ValType::F32) | Some(ValType::F64)
-        | Some(ValType::V128) | None => instructions.push(Instruction::Select),
+        | Some(ValType::V128) | Some(ValType::Ptr) | None => instructions.push(Instruction::Select),
     }
     Ok(())
 }

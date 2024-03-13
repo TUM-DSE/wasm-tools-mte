@@ -578,6 +578,7 @@ impl From<core::ValType<'_>> for wasm_encoder::ValType {
             core::ValType::F32 => Self::F32,
             core::ValType::F64 => Self::F64,
             core::ValType::V128 => Self::V128,
+            core::ValType::Ptr => Self::Ptr,
             core::ValType::Ref(r) => Self::Ref(r.into()),
         }
     }

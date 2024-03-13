@@ -984,12 +984,30 @@ impl<'a> BinaryReader<'a> {
             0xd5 => visitor.visit_br_on_null(self.read_var_u32()?),
             0xd6 => visitor.visit_br_on_non_null(self.read_var_u32()?),
 
+            0xfa => self.visit_0xfa_operator(pos, visitor)?,
             0xfb => self.visit_0xfb_operator(pos, visitor)?,
             0xfc => self.visit_0xfc_operator(pos, visitor)?,
             0xfd => self.visit_0xfd_operator(pos, visitor)?,
             0xfe => self.visit_0xfe_operator(pos, visitor)?,
 
             _ => bail!(pos, "illegal opcode: 0x{code:x}"),
+        })
+    }
+
+    fn visit_0xfa_operator<T>(
+        &mut self,
+        pos: usize,
+        visitor: &mut T,
+    ) -> Result<<T as VisitOperator<'a>>::Output>
+        where
+            T: VisitOperator<'a>,
+    {
+        let code = self.read_var_u32()?;
+        Ok(match code {
+            0xA0 => visitor.visit_segment_new(self.read_memarg(4)?),
+            0xA1 => visitor.visit_ptr_add(),
+
+            _ => bail!(pos, "unknown 0xfa subopcode: 0x{code:x}"),
         })
     }
 

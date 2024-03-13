@@ -65,6 +65,9 @@ impl Mutator for SnipMutator {
                             PrimitiveTypeInfo::ExternRef => {
                                 f.instruction(&Instruction::RefNull(HeapType::Extern));
                             }
+                            PrimitiveTypeInfo::Ptr => {
+                                todo!("ptr");
+                            }
                             PrimitiveTypeInfo::Empty => {
                                 unreachable!()
                             }

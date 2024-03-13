@@ -13,6 +13,7 @@ pub enum ValType<'a> {
     F32,
     F64,
     V128,
+    Ptr,
     Ref(RefType<'a>),
 }
 
@@ -36,6 +37,9 @@ impl<'a> Parse<'a> for ValType<'a> {
             Ok(ValType::V128)
         } else if l.peek::<RefType>()? {
             Ok(ValType::Ref(parser.parse()?))
+        } else if l.peek::<kw::ptr>()? {
+            parser.parse::<kw::ptr>()?;
+            Ok(ValType::Ptr)
         } else {
             Err(l.error())
         }
