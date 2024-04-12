@@ -984,6 +984,7 @@ pub enum Instruction<'a> {
     // Memory Safety instructions
     SegmentNew(MemArg),
     PtrAdd,
+    PtrLoad(MemArg),
 }
 
 impl Encode for Instruction<'_> {
@@ -3129,12 +3130,17 @@ impl Encode for Instruction<'_> {
             }
             Instruction::SegmentNew(memarg) => {
                 sink.push(0xFA);
-                sink.push(0xA0);
+                sink.push(0x00);
                 memarg.encode(sink);
             }
             Instruction::PtrAdd => {
                 sink.push(0xFA);
-                sink.push(0xA1);
+                sink.push(0x10);
+            }
+            Instruction::PtrLoad(memarg) => {
+                sink.push(0xFA);
+                sink.push(0x11);
+                memarg.encode(sink);
             }
         }
     }

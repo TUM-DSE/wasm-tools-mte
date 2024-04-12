@@ -3988,12 +3988,17 @@ where
         self.push_operand(ValType::Ptr)
     }
     fn visit_ptr_add(&mut self) -> Self::Output {
-        // We assume no multi memory for now
-        assert!(!self.features.multi_memory);
+        // TODO(MF): we assume no multi memory for now
         let offset_ty = self.check_memory_index_size_ty(0)?;
         self.pop_operand(Some(offset_ty))?;
         self.pop_operand(Some(ValType::Ptr))?;
         self.push_operand(ValType::Ptr)
+    }
+    fn visit_ptr_load(&mut self, mem: MemArg) -> Self::Output {
+        let ty = self.check_memarg(mem)?;
+        self.pop_operand(Some(ty))?;
+        self.push_operand(ValType::Ptr)?;
+        Ok(())
     }
 }
 

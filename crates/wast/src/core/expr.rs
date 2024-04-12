@@ -1094,6 +1094,11 @@ instructions! {
         I16x8RelaxedQ15mulrS: [0xfd, 0x111]: "i16x8.relaxed_q15mulr_s",
         I16x8RelaxedDotI8x16I7x16S: [0xfd, 0x112]: "i16x8.relaxed_dot_i8x16_i7x16_s",
         I32x4RelaxedDotI8x16I7x16AddS: [0xfd, 0x113]: "i32x4.relaxed_dot_i8x16_i7x16_add_s",
+
+        // Memory Safety stuff
+        SegmentNew(MemArg<1>) : [0xfa, 0x00] : "segment.new",
+        PtrAdd : [0xfa, 0x10] : "ptr.add",
+        PtrLoad(MemArg<1>) : [0xfa, 0x11] : "ptr.load",
     }
 }
 

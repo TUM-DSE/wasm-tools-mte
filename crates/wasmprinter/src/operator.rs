@@ -1103,6 +1103,7 @@ macro_rules! define_visit {
     (name Delegate) => ("delegate");
     (name SegmentNew) => ("segment.new");
     (name PtrAdd) => ("ptr.add");
+    (name PtrLoad) => ("ptr.load");
 }
 
 impl<'a> VisitOperator<'a> for PrintOperator<'_, '_> {

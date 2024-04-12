@@ -1004,8 +1004,12 @@ impl<'a> BinaryReader<'a> {
     {
         let code = self.read_var_u32()?;
         Ok(match code {
-            0xA0 => visitor.visit_segment_new(self.read_memarg(4)?),
-            0xA1 => visitor.visit_ptr_add(),
+            // segment operators
+            0x00 => visitor.visit_segment_new(self.read_memarg(4)?),
+
+            // ptr operators
+            0x10 => visitor.visit_ptr_add(),
+            0x11 => visitor.visit_ptr_load(self.read_memarg(4)?),
 
             _ => bail!(pos, "unknown 0xfa subopcode: 0x{code:x}"),
         })
