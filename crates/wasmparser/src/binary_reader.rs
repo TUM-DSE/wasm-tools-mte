@@ -1501,6 +1501,9 @@ impl<'a> BinaryReader<'a> {
             0x00 => visitor.visit_segment_new(self.read_memarg(1)?),
             0x01 => visitor.visit_segment_set_tag(self.read_memarg(1)?),
             0x02 => visitor.visit_segment_free(self.read_memarg(1)?),
+            0x04 => visitor.visit_pointer_sign(),
+            0x05 => visitor.visit_pointer_auth(),
+            0x06 => visitor.visit_pointer_strip(),
 
             _ => bail!(pos, "unknown 0xfa subopcode: 0x{code:x}"),
         })

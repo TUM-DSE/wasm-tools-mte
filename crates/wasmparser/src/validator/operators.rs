@@ -3399,6 +3399,24 @@ where
         self.pop_operand(Some(ty))?; // pointer
         Ok(())
     }
+
+    fn visit_pointer_sign(&mut self) -> Self::Output {
+        self.pop_operand(Some(ValType::I64))?;
+        self.push_operand(ValType::I64)?;
+        Ok(())
+    }
+
+    fn visit_pointer_auth(&mut self) -> Self::Output {
+        self.pop_operand(Some(ValType::I64))?;
+        self.push_operand(ValType::I64)?;
+        Ok(())
+    }
+
+    fn visit_pointer_strip(&mut self) -> Self::Output {
+        self.pop_operand(Some(ValType::I64))?;
+        self.push_operand(ValType::I64)?;
+        Ok(())
+    }
 }
 
 #[derive(Clone)]

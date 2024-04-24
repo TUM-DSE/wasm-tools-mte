@@ -868,6 +868,9 @@ pub enum Instruction<'a> {
     SegmentNew(MemArg),
     SegmentSetTag(MemArg),
     SegmentFree(MemArg),
+    PointerSign,
+    PointerAuth,
+    PointerStrip,
 }
 
 impl Encode for Instruction<'_> {
@@ -2820,6 +2823,18 @@ impl Encode for Instruction<'_> {
                 sink.push(0xFA);
                 sink.push(0x02);
                 memarg.encode(sink);
+            }
+            Instruction::PointerSign => {
+                sink.push(0xFA);
+                sink.push(0x04);
+            }
+            Instruction::PointerAuth => {
+                sink.push(0xFA);
+                sink.push(0x05);
+            }
+            Instruction::PointerStrip => {
+                sink.push(0xFA);
+                sink.push(0x06);
             }
         }
     }

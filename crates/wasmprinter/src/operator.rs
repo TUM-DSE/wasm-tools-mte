@@ -867,6 +867,9 @@ macro_rules! define_visit {
     (name SegmentNew) => ("segment.new");
     (name SegmentSetTag) => ("segment.set_tag");
     (name SegmentFree) => ("segment.free");
+    (name PointerSign) => ("i64.pointer_sign");
+    (name PointerAuth) => ("i64.pointer_auth");
+    (name PointerStrip) => ("i64.pointer_strip");
 }
 
 impl<'a> VisitOperator<'a> for PrintOperator<'_, '_> {
