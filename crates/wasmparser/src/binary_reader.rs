@@ -1010,6 +1010,7 @@ impl<'a> BinaryReader<'a> {
             // ptr operators
             0x10 => visitor.visit_ptr_add(),
             0x11 => visitor.visit_ptr_load(self.read_memarg(4)?),
+            0x12 => visitor.visit_ptr_store(self.read_memarg(4)?),
 
             _ => bail!(pos, "unknown 0xfa subopcode: 0x{code:x}"),
         })

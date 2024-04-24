@@ -743,6 +743,7 @@ macro_rules! for_each_operator {
             @memory_safety SegmentNew { memarg: $crate::MemArg } => visit_segment_new
             @memory_safety PtrAdd => visit_ptr_add
             @memory_safety PtrLoad { memarg: $crate::MemArg } => visit_ptr_load
+            @memory_safety PtrStore { memarg: $crate::MemArg } => visit_ptr_store
         }
     };
 }

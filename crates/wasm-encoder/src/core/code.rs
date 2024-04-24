@@ -985,6 +985,7 @@ pub enum Instruction<'a> {
     SegmentNew(MemArg),
     PtrAdd,
     PtrLoad(MemArg),
+    PtrStore(MemArg),
 }
 
 impl Encode for Instruction<'_> {
@@ -3140,6 +3141,11 @@ impl Encode for Instruction<'_> {
             Instruction::PtrLoad(memarg) => {
                 sink.push(0xFA);
                 sink.push(0x11);
+                memarg.encode(sink);
+            }
+            Instruction::PtrStore(memarg) => {
+                sink.push(0xFA);
+                sink.push(0x12);
                 memarg.encode(sink);
             }
         }

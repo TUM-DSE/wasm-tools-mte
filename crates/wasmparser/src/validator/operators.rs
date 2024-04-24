@@ -4000,6 +4000,12 @@ where
         self.push_operand(ValType::Ptr)?;
         Ok(())
     }
+    fn visit_ptr_store(&mut self, mem: MemArg) -> Self::Output {
+        let ty = self.check_memarg(mem)?;
+        self.pop_operand(ValType::Ptr)?;
+        self.pop_operand(Some(ty))?;
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug)]

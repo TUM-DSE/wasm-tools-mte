@@ -1099,6 +1099,7 @@ instructions! {
         SegmentNew(MemArg<1>) : [0xfa, 0x00] : "segment.new",
         PtrAdd : [0xfa, 0x10] : "ptr.add",
         PtrLoad(MemArg<1>) : [0xfa, 0x11] : "ptr.load",
+        PtrLoad(MemArg<1>) : [0xfa, 0x12] : "ptr.store",
     }
 }
 

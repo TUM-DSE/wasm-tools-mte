@@ -1104,6 +1104,7 @@ macro_rules! define_visit {
     (name SegmentNew) => ("segment.new");
     (name PtrAdd) => ("ptr.add");
     (name PtrLoad) => ("ptr.load");
+    (name PtrStore) => ("ptr.store");
 }
 
 impl<'a> VisitOperator<'a> for PrintOperator<'_, '_> {
