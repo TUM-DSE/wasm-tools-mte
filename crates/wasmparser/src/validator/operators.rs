@@ -1043,6 +1043,7 @@ macro_rules! validate_proposal {
     (desc memory_control) => ("memory control");
     (desc gc) => ("gc");
     (desc mem_safety) => ("memory safety");
+    (desc ptr_auth) => ("pointer authentication");
 }
 
 impl<'a, T> VisitOperator<'a> for WasmProposalValidator<'_, '_, T>

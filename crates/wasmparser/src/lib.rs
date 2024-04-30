@@ -703,9 +703,9 @@ macro_rules! for_each_operator {
             @mem_safety SegmentNew { memarg: $crate::MemArg } => visit_segment_new
             @mem_safety SegmentSetTag { memarg: $crate::MemArg } => visit_segment_set_tag
             @mem_safety SegmentFree { memarg: $crate::MemArg } => visit_segment_free
-            @mem_safety PointerSign => visit_pointer_sign
-            @mem_safety PointerAuth => visit_pointer_auth
-            @mem_safety PointerStrip => visit_pointer_strip
+            @ptr_auth PointerSign => visit_pointer_sign
+            @ptr_auth PointerAuth => visit_pointer_auth
+            @ptr_auth PointerStrip => visit_pointer_strip
         }
     };
 }

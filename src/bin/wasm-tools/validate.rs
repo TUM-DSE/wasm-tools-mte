@@ -120,6 +120,7 @@ fn parse_features(arg: &str) -> Result<WasmFeatures> {
         ("relaxed-simd", |f| &mut f.relaxed_simd),
         ("gc", |f| &mut f.gc),
         ("mem-safety", |f| &mut f.mem_safety),
+        ("ptr-auth", |f| &mut f.ptr_auth),
     ];
 
     for part in arg.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()) {

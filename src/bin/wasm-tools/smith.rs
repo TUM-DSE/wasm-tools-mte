@@ -195,6 +195,9 @@ struct Config {
     #[clap(long = "mem-safety")]
     #[serde(rename = "mem-safety")]
     mem_safety_enabled: Option<bool>,
+    #[clap(long = "ptr-auth")]
+    #[serde(rename = "ptr-auth")]
+    ptr_auth_enabled: Option<bool>,
 }
 
 impl Opts {
@@ -322,6 +325,7 @@ impl wasm_smith::Config for CliAndJsonConfig {
         (generate_custom_sections, bool, false),
         (threads_enabled, bool, false),
         (mem_safety_enabled, bool, false),
+        (ptr_auth_enabled, bool, false),
     }
 
     fn max_memory_pages(&self, _is_64: bool) -> u64 {

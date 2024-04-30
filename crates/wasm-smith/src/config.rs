@@ -460,11 +460,15 @@ pub trait Config: 'static + std::fmt::Debug {
 
     /// Determines whether the mem_safety proposal is enabled.
     ///
-    /// The [mem_safety proposal] involves shared linear memory, new atomic
-    /// instructions, and new `wait` and `notify` instructions.
-    ///
     /// Defaults to `false`.
     fn mem_safety_enabled(&self) -> bool {
+        false
+    }
+
+    /// Determines whether the ptr_auth proposal is enabled.
+    ///
+    /// Defaults to `false`.
+    fn ptr_auth_enabled(&self) -> bool {
         false
     }
 
@@ -560,6 +564,7 @@ pub struct SwarmConfig {
     pub simd_enabled: bool,
     pub threads_enabled: bool,
     pub mem_safety_enabled: bool,
+    pub ptr_auth_enabled: bool,
     pub allowed_instructions: InstructionKinds,
     pub max_table_elements: u32,
     pub table_max_size_required: bool,
@@ -637,6 +642,7 @@ impl<'a> Arbitrary<'a> for SwarmConfig {
             available_imports: None,
             threads_enabled: false,
             mem_safety_enabled: false,
+            ptr_auth_enabled: false,
             export_everything: false,
             disallow_traps: false,
             tail_call_enabled: false,
@@ -833,6 +839,10 @@ impl Config for SwarmConfig {
 
     fn mem_safety_enabled(&self) -> bool {
         self.mem_safety_enabled
+    }
+
+    fn ptr_auth_enabled(&self) -> bool {
+        self.ptr_auth_enabled
     }
 
     fn allowed_instructions(&self) -> InstructionKinds {

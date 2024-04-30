@@ -251,6 +251,8 @@ pub struct WasmFeatures {
     pub component_model_values: bool,
     /// The WebAssembly memory safety proposal
     pub mem_safety: bool,
+    /// The WebAssembly ptr auth proposal
+    pub ptr_auth: bool,
 }
 
 impl WasmFeatures {
@@ -278,6 +280,7 @@ impl WasmFeatures {
             gc: true,
             component_model_values: true,
             mem_safety: true,
+            ptr_auth: true,
         }
     }
 
@@ -366,6 +369,7 @@ impl Default for WasmFeatures {
             gc: false,
             component_model_values: false,
             mem_safety: false,
+            ptr_auth: false,
 
             // On-by-default features (phase 4 or greater).
             mutable_global: true,
