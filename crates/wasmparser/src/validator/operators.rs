@@ -3401,20 +3401,22 @@ where
     }
 
     fn visit_pointer_sign(&mut self) -> Self::Output {
-        self.pop_operand(Some(ValType::I64))?;
+        self.pop_operand(Some(ValType::I64))?; // pointer
+        self.pop_operand(Some(ValType::I64))?; // modifier
         self.push_operand(ValType::I64)?;
         Ok(())
     }
 
     fn visit_pointer_auth(&mut self) -> Self::Output {
-        self.pop_operand(Some(ValType::I64))?;
-        self.push_operand(ValType::I64)?;
+        self.pop_operand(Some(ValType::I64))?; // signed pointer
+        self.pop_operand(Some(ValType::I64))?; // modifier
+        self.push_operand(ValType::I64)?; // authenticated pointer
         Ok(())
     }
 
     fn visit_pointer_strip(&mut self) -> Self::Output {
-        self.pop_operand(Some(ValType::I64))?;
-        self.push_operand(ValType::I64)?;
+        self.pop_operand(Some(ValType::I64))?; // authenticated pointer
+        self.push_operand(ValType::I64)?; // stripped pointer
         Ok(())
     }
 }
