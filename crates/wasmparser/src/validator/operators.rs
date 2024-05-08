@@ -3403,14 +3403,12 @@ where
 
     fn visit_pointer_sign(&mut self) -> Self::Output {
         self.pop_operand(Some(ValType::I64))?; // pointer
-        self.pop_operand(Some(ValType::I64))?; // modifier
         self.push_operand(ValType::I64)?;
         Ok(())
     }
 
     fn visit_pointer_auth(&mut self) -> Self::Output {
         self.pop_operand(Some(ValType::I64))?; // signed pointer
-        self.pop_operand(Some(ValType::I64))?; // modifier
         self.push_operand(ValType::I64)?; // authenticated pointer
         Ok(())
     }
