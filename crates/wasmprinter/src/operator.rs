@@ -1388,6 +1388,12 @@ macro_rules! define_visit {
     (name I64Sub128) => ("i64.sub128");
     (name I64MulWideS) => ("i64.mul_wide_s");
     (name I64MulWideU) => ("i64.mul_wide_u");
+    (name SegmentNew) => ("segment.new");
+    (name SegmentSetTag) => ("segment.set_tag");
+    (name SegmentFree) => ("segment.free");
+    (name PointerSign) => ("i64.pointer_sign");
+    (name PointerAuth) => ("i64.pointer_auth");
+    (name PointerStrip) => ("i64.pointer_strip");
 }
 
 impl<'a> VisitOperator<'a> for PrintOperator<'_, '_, '_, '_> {

@@ -4106,6 +4106,51 @@ impl<'a> InstructionSink<'a> {
         self
     }
 
+    /// Encode [`Instruction::SegmentNew`].
+    pub fn segment_new(&mut self, memarg: MemArg) -> &mut Self {
+        self.sink.push(0xFA);
+        self.sink.push(0x00);
+        memarg.encode(self.sink);
+        self
+    }
+
+    /// Encode [`Instruction::SegmentSetTag`].
+    pub fn segment_set_tag(&mut self, memarg: MemArg) -> &mut Self {
+        self.sink.push(0xFA);
+        self.sink.push(0x01);
+        memarg.encode(self.sink);
+        self
+    }
+
+    /// Encode [`Instruction::SegmentFree`].
+    pub fn segment_free(&mut self, memarg: MemArg) -> &mut Self {
+        self.sink.push(0xFA);
+        self.sink.push(0x02);
+        memarg.encode(self.sink);
+        self
+    }
+
+    /// Encode [`Instruction::PointerSign`].
+    pub fn pointer_sign(&mut self) -> &mut Self {
+        self.sink.push(0xFA);
+        self.sink.push(0x04);
+        self
+    }
+
+    /// Encode [`Instruction::PointerAuth`].
+    pub fn pointer_auth(&mut self) -> &mut Self {
+        self.sink.push(0xFA);
+        self.sink.push(0x05);
+        self
+    }
+
+    /// Encode [`Instruction::PointerStrip`].
+    pub fn pointer_strip(&mut self) -> &mut Self {
+        self.sink.push(0xFA);
+        self.sink.push(0x06);
+        self
+    }
+
     /// Encode [`Instruction::I64AtomicRmw32CmpxchgU`].
     pub fn i64_atomic_rmw32_cmpxchg_u(&mut self, memarg: MemArg) -> &mut Self {
         self.sink.push(0xFE);

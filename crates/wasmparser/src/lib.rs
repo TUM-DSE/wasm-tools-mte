@@ -779,6 +779,18 @@ macro_rules! _for_each_operator_group {
                 I64MulWideS => visit_i64_mul_wide_s (arity 2 -> 2)
                 I64MulWideU => visit_i64_mul_wide_u (arity 2 -> 2)
             }
+
+            @mem_safety {
+                SegmentNew { memarg: $crate::MemArg } => visit_segment_new (arity 2 -> 1)
+                SegmentSetTag { memarg: $crate::MemArg } => visit_segment_set_tag (arity 3 -> 0)
+                SegmentFree { memarg: $crate::MemArg } => visit_segment_free (arity 2 -> 0)
+            }
+
+            @ptr_auth {
+                PointerSign => visit_pointer_sign (arity 1 -> 1)
+                PointerAuth => visit_pointer_auth (arity 1 -> 1)
+                PointerStrip => visit_pointer_strip (arity 1 -> 1)
+            }
         }
     };
 }

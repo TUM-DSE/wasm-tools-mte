@@ -1136,6 +1136,12 @@ pub enum Instruction<'a> {
     I64AtomicRmw8CmpxchgU(MemArg),
     I64AtomicRmw16CmpxchgU(MemArg),
     I64AtomicRmw32CmpxchgU(MemArg),
+    SegmentNew(MemArg),
+    SegmentSetTag(MemArg),
+    SegmentFree(MemArg),
+    PointerSign,
+    PointerAuth,
+    PointerStrip,
 
     // More atomic instructions (the shared-everything-threads proposal)
     GlobalAtomicGet {
@@ -1967,6 +1973,12 @@ impl Encode for Instruction<'_> {
             Instruction::I64AtomicRmw8CmpxchgU(memarg) => sink.i64_atomic_rmw8_cmpxchg_u(memarg),
             Instruction::I64AtomicRmw16CmpxchgU(memarg) => sink.i64_atomic_rmw16_cmpxchg_u(memarg),
             Instruction::I64AtomicRmw32CmpxchgU(memarg) => sink.i64_atomic_rmw32_cmpxchg_u(memarg),
+            Instruction::SegmentNew(memarg) => sink.segment_new(memarg),
+            Instruction::SegmentSetTag(memarg) => sink.segment_set_tag(memarg),
+            Instruction::SegmentFree(memarg) => sink.segment_free(memarg),
+            Instruction::PointerSign => sink.pointer_sign(),
+            Instruction::PointerAuth => sink.pointer_auth(),
+            Instruction::PointerStrip => sink.pointer_strip(),
 
             // Atomic instructions from the shared-everything-threads proposal
             Instruction::GlobalAtomicGet {

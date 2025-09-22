@@ -1202,6 +1202,13 @@ instructions! {
         I64Sub128   : [0xfc, 20] : "i64.sub128",
         I64MulWideS : [0xfc, 21] : "i64.mul_wide_s",
         I64MulWideU : [0xfc, 22] : "i64.mul_wide_u",
+
+        SegmentNew(MemArg<1>) : [0xfa, 0x00]: "segment.new",
+        SegmentSetTag(MemArg<1>) : [0xfa, 0x01]: "segment.set_tag",
+        SegmentFree(MemArg<1>) : [0xfa, 0x02]: "segment.free",
+        PointerSign : [0xfa, 0x04]: "i64.pointer_sign",
+        PointerAuth : [0xfa, 0x05]: "i64.pointer_auth",
+        PointerStrip : [0xfa, 0x06]: "i64.pointer_strip",
     }
 }
 

@@ -706,6 +706,12 @@ define_config! {
         /// Defaults to `true`.
         pub threads_enabled: bool = true,
 
+        /// Defaults to `true`.
+        pub mem_safety_enabled: bool = true,
+
+        /// Defaults to `true`.
+        pub ptr_auth_enabled: bool = true,
+
         /// Indicates whether wasm-smith is allowed to generate invalid function
         /// bodies.
         ///
@@ -823,6 +829,8 @@ impl<'a> Arbitrary<'a> for Config {
             relaxed_simd_enabled: u.arbitrary()?,
             exceptions_enabled: u.arbitrary()?,
             threads_enabled: u.arbitrary()?,
+            mem_safety_enabled: u.arbitrary()?,
+            ptr_auth_enabled: u.arbitrary()?,
             tail_call_enabled: u.arbitrary()?,
             gc_enabled: u.arbitrary()?,
             memory64_enabled: u.arbitrary()?,
@@ -962,6 +970,8 @@ impl Config {
         features.set(WasmFeatures::FUNCTION_REFERENCES, self.gc_enabled);
         features.set(WasmFeatures::GC, self.gc_enabled);
         features.set(WasmFeatures::THREADS, self.threads_enabled);
+        features.set(WasmFeatures::MEM_SAFETY, self.mem_safety_enabled);
+        features.set(WasmFeatures::PTR_AUTH, self.ptr_auth_enabled);
         features.set(
             WasmFeatures::SHARED_EVERYTHING_THREADS,
             self.shared_everything_threads_enabled,

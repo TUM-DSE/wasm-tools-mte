@@ -1202,6 +1202,7 @@ impl<'a> BinaryReader<'a> {
                 bail!(pos, "unexpected SIMD opcode: 0x{code:x}")
             }
             0xfe => self.visit_0xfe_operator(pos, visitor)?,
+            0xfa => self.visit_0xfa_operator(pos, visitor)?,
 
             _ => bail!(pos, "illegal opcode: 0x{code:x}"),
         })
@@ -1949,6 +1950,27 @@ impl<'a> BinaryReader<'a> {
             0x72 => visitor.visit_ref_i31_shared(),
 
             _ => bail!(pos, "unknown 0xfe subopcode: 0x{code:x}"),
+        })
+    }
+
+    fn visit_0xfa_operator<T>(
+        &mut self,
+        pos: usize,
+        visitor: &mut T,
+    ) -> Result<<T as VisitOperator<'a>>::Output>
+    where
+        T: VisitOperator<'a>,
+    {
+        let code = self.read_var_u32()?;
+        Ok(match code {
+            0x00 => visitor.visit_segment_new(self.read_memarg(1)?),
+            0x01 => visitor.visit_segment_set_tag(self.read_memarg(1)?),
+            0x02 => visitor.visit_segment_free(self.read_memarg(1)?),
+            0x04 => visitor.visit_pointer_sign(),
+            0x05 => visitor.visit_pointer_auth(),
+            0x06 => visitor.visit_pointer_strip(),
+
+            _ => bail!(pos, "unknown 0xfa subopcode: 0x{code:x}"),
         })
     }
 
