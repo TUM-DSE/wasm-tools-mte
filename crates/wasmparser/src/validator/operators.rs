@@ -1704,6 +1704,8 @@ macro_rules! validate_proposal {
     (desc gc) => ("gc");
     (desc legacy_exceptions) => ("legacy exceptions");
     (desc stack_switching) => ("stack switching");
+    (desc mem_safety) => ("memory safety");
+    (desc ptr_auth) => ("pointer authentication");
 }
 
 impl<'a, T> VisitOperator<'a> for WasmProposalValidator<'_, '_, T>
@@ -5033,6 +5035,62 @@ where
                 "type mismatch: instruction requires a continuation reference"
             ),
         }
+        Ok(())
+    }
+
+    fn visit_segment_new(&mut self, sp: MemArg) -> Self::Output {
+        let ty = self.check_memarg(sp)?;
+        assert_eq!(
+            ty,
+            ValType::I64,
+            "memory safety instructions only available in wasm64"
+        );
+        self.pop_operand(Some(ValType::I64))?;
+        self.pop_operand(Some(ty))?;
+        self.push_operand(ValType::I64)?;
+        Ok(())
+    }
+
+    fn visit_segment_set_tag(&mut self, ptr: MemArg) -> Self::Output {
+        let ty = self.check_memarg(ptr)?;
+        assert_eq!(
+            ty,
+            ValType::I64,
+            "memory safety instructions only available in wasm64"
+        );
+        self.pop_operand(Some(ValType::I64))?; // size
+        self.pop_operand(Some(ty))?; // tag
+        self.pop_operand(Some(ty))?; // pointer
+        Ok(())
+    }
+
+    fn visit_segment_free(&mut self, ptr: MemArg) -> Self::Output {
+        let ty = self.check_memarg(ptr)?;
+        assert_eq!(
+            ty,
+            ValType::I64,
+            "memory safety instructions only available in wasm64"
+        );
+        self.pop_operand(Some(ValType::I64))?;
+        self.pop_operand(Some(ty))?; // pointer
+        Ok(())
+    }
+
+    fn visit_pointer_sign(&mut self) -> Self::Output {
+        self.pop_operand(Some(ValType::I64))?; // pointer
+        self.push_operand(ValType::I64)?;
+        Ok(())
+    }
+
+    fn visit_pointer_auth(&mut self) -> Self::Output {
+        self.pop_operand(Some(ValType::I64))?; // signed pointer
+        self.push_operand(ValType::I64)?; // authenticated pointer
+        Ok(())
+    }
+
+    fn visit_pointer_strip(&mut self) -> Self::Output {
+        self.pop_operand(Some(ValType::I64))?; // authenticated pointer
+        self.push_operand(ValType::I64)?; // stripped pointer
         Ok(())
     }
 }

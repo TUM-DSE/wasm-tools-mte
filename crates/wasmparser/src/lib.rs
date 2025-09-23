@@ -813,6 +813,14 @@ macro_rules! for_each_operator {
             @stack_switching Resume { cont_type_index: u32, resume_table: $crate::ResumeTable } => visit_resume (arity 1 type -> type)
             @stack_switching ResumeThrow { cont_type_index: u32, tag_index: u32, resume_table: $crate::ResumeTable } => visit_resume_throw (arity 1 tag -> type)
             @stack_switching Switch { cont_type_index: u32, tag_index: u32 } => visit_switch (arity type -> ~switch)
+
+            // Memory Safety Instructions
+            @mem_safety SegmentNew { memarg: $crate::MemArg } => visit_segment_new (arity 2 -> 1)
+            @mem_safety SegmentSetTag { memarg: $crate::MemArg } => visit_segment_set_tag (arity 3 -> 0)
+            @mem_safety SegmentFree { memarg: $crate::MemArg } => visit_segment_free (arity 2 -> 0)
+            @ptr_auth PointerSign => visit_pointer_sign (arity 1 -> 1)
+            @ptr_auth PointerAuth => visit_pointer_auth (arity 1 -> 1)
+            @ptr_auth PointerStrip => visit_pointer_strip (arity 1 -> 1)
         }
     };
 }

@@ -100,6 +100,8 @@ pub fn validator_for_config(config: &Config) -> wasmparser::Validator {
     features.set(WasmFeatures::RELAXED_SIMD, config.relaxed_simd_enabled);
     features.set(WasmFeatures::MEMORY64, config.memory64_enabled);
     features.set(WasmFeatures::THREADS, config.threads_enabled);
+    features.set(WasmFeatures::MEM_SAFETY, config.mem_safety_enabled);
+    features.set(WasmFeatures::PTR_AUTH, config.ptr_auth_enabled);
     features.set(WasmFeatures::EXCEPTIONS, config.exceptions_enabled);
     features.set(
         WasmFeatures::CUSTOM_PAGE_SIZES,

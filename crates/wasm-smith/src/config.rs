@@ -599,6 +599,12 @@ define_config! {
         ///
         /// Defaults to `false`.
         pub allow_invalid_funcs: bool = false,
+
+        /// Defaults to `true`.
+        pub mem_safety_enabled: bool = true,
+
+        /// Defaults to `true`.
+        pub ptr_auth_enabled: bool = true,
     }
 }
 
@@ -689,6 +695,8 @@ impl<'a> Arbitrary<'a> for Config {
             relaxed_simd_enabled: u.arbitrary()?,
             exceptions_enabled: u.arbitrary()?,
             threads_enabled: u.arbitrary()?,
+            mem_safety_enabled: u.arbitrary()?,
+            ptr_auth_enabled: u.arbitrary()?,
             tail_call_enabled: u.arbitrary()?,
             gc_enabled: u.arbitrary()?,
             allowed_instructions: {

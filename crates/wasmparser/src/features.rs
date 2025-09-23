@@ -227,6 +227,8 @@ define_wasm_features! {
         pub gc_types: GC_TYPES(1 << 26) = true;
         /// The WebAssembly [stack-switching proposal](https://github.com/WebAssembly/stack-switching).
         pub stack_switching: STACK_SWITCHING(1 << 27) = false;
+        pub mem_safety: MEM_SAFETY(1 << 28) = true;
+        pub ptr_auth: PTR_AUTH(1 << 29) = true;
     }
 }
 

@@ -9,3 +9,5 @@ test.config
 .DS_Store
 .idea
 .vscode
+
+.direnv

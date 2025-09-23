@@ -1379,7 +1379,13 @@ macro_rules! define_visit {
     (name Suspend) => ("suspend");
     (name Resume) => ("resume");
     (name ResumeThrow) => ("resume_throw");
-    (name Switch) => ("switch")
+    (name Switch) => ("switch");
+    (name SegmentNew) => ("segment.new");
+    (name SegmentSetTag) => ("segment.set_tag");
+    (name SegmentFree) => ("segment.free");
+    (name PointerSign) => ("i64.pointer_sign");
+    (name PointerAuth) => ("i64.pointer_auth");
+    (name PointerStrip) => ("i64.pointer_strip");
 }
 
 impl<'a> VisitOperator<'a> for PrintOperator<'_, '_, '_, '_> {

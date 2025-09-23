@@ -1195,6 +1195,13 @@ instructions! {
         Resume(Resume<'a>)             : [0xe3] : "resume",
         ResumeThrow(ResumeThrow<'a>)   : [0xe4] : "resume_throw",
         Switch(Switch<'a>)             : [0xe5] : "switch",
+
+        SegmentNew(MemArg<1>) : [0xfa, 0x00]: "segment.new",
+        SegmentSetTag(MemArg<1>) : [0xfa, 0x01]: "segment.set_tag",
+        SegmentFree(MemArg<1>) : [0xfa, 0x02]: "segment.free",
+        PointerSign : [0xfa, 0x04]: "i64.pointer_sign",
+        PointerAuth : [0xfa, 0x05]: "i64.pointer_auth",
+        PointerStrip : [0xfa, 0x06]: "i64.pointer_strip",
     }
 }
 
